@@ -1,0 +1,28 @@
+# 需求：将 Alta Lex 客户端脚本封装为技能(Skill)，集成到 OpenClaw 系统，并实现 WhatsApp 集成
+
+## 项目背景
+当前已有 Alta Lex AI 平台的 Python 客户端脚本 (​alta_lex_client.py​)，该脚本已实现登录认证、会话管理和 API 交互功能。
+
+## 目标
+1. **智能触发机制**：当用户询问房屋相关法律问题时，系统自动调用 Alta Lex Client Skill，通过 Python 方式进行专业法律咨询
+2. **无缝集成链路**：实现 WhatsApp → OpenClaw → Alta Lex Skill → Alta Lex API 的完整调用链
+3. **响应处理**：调用完成后，将 Alta Lex 的返回内容作为 OpenClaw 的回复返回给用户
+4. **交互优化**：在 OpenClaw 中通过构建会话文件，实现定时轮询机制，将流式返回的内容实时展示给客户，轮询间隔设为30秒
+
+## 具体要求
+1. 将 ​alta_lex_client.py​ 封装为可复用的 Skill 模块，适配 OpenClaw 框架
+2. 实现智能识别房屋相关法律问题的触发条件
+3. 设计会话管理机制，支持长时间运行的法律分析任务
+4. 实现30秒间隔的定时轮询，持续获取 SSE 流式响应并反馈给用户
+5. 确保错误处理和会话过期重连机制正常工作
+
+## 预期流程
+1. 用户通过 WhatsApp 发送房屋相关法律问题
+2. OpenClaw 接收并识别问题类型
+3. 自动调用 Alta Lex Skill
+4. Skill 创建分析会话并启动流式分析
+5. 通过定时轮询机制持续获取分析结果
+6. 将结果返回给 OpenClaw 并转发至 WhatsApp
+
+# 资料
+Openclaw Rule文档：https://docs.openclaw.ai/tools/skills
