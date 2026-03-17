@@ -63,7 +63,7 @@ Payload: {"uid": "fd007687-...", "exp": 1773584860, "iat": 1773574060}
   "message": "登录成功",
   "data": {
     "uid": "fd007687-53b5-4847-a376-8b70c48e9e9a",
-    "username": "Mplus",
+    "username": "***",
     "role": "user",
     "status": "1",
     "parent_uid": "123456",
@@ -280,19 +280,19 @@ pip install requests
 
 ```bash
 # 登录并列出所有会话
-python3 ~/workspace/demo/alta_lex_client.py -u Mplus -p 'PPD689#' --list-sessions
+python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' --list-sessions
 
 # 查看指定会话的历史
-python3 ~/workspace/demo/alta_lex_client.py -u Mplus -p 'PPD689#' --session-history <SESSION_ID>
+python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' --session-history <SESSION_ID>
 
 # 发起法律分析查询（SSE 流式输出）
-python3 ~/workspace/demo/alta_lex_client.py -u Mplus -p 'PPD689#' \
+python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' \
     -q "What are the requirements for a valid contract?" \
     --practice-area "Contract Law" \
     --jurisdiction "Hong Kong"
 
 # 启用 Legal Research Pro 模式
-python3 ~/workspace/demo/alta_lex_client.py -u Mplus -p 'PPD689#' \
+python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' \
     -q "..." --pro
 ```
 
