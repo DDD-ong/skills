@@ -1,5 +1,5 @@
 ---
-name: alta-lex-legal
+name: alex_law_legal
 description: "Professional legal research and analysis via Alta Lex AI platform. Use when: (1) user asks about property law, real estate law, housing law, tenancy, lease, landlord-tenant disputes, building management, property transactions, conveyancing, or stamp duty, (2) user asks a legal question about buying/selling/renting property or housing regulations, (3) user explicitly requests Alta Lex legal analysis, (4) user asks about the property ordinances, building codes, or land law. NOT for: general legal questions unrelated to property/housing, simple factual lookups, non-legal questions about real estate prices or market trends."
 metadata: { "openclaw": { "emoji": "⚖️", "requires": { "bins": ["python3"], "env": ["ALTA_LEX_USERNAME", "ALTA_LEX_PASSWORD"] }, "os": ["darwin", "linux"] } }
 ---
