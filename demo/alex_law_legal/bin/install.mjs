@@ -1,6 +1,8 @@
+#!/usr/bin/env node
+
 /**
- * OpenClaw Skill Postinstall Script
- * Automatically deploys alex-law-legal skill to ~/.openclaw/skills/
+ * OpenClaw Skill Install Script
+ * Deploys alex-law-legal skill to ~/.openclaw/skills/
  */
 
 import fs from 'fs';
@@ -81,12 +83,12 @@ function install() {
   // Check source files exist
   if (!pathExists(sourceSkillMd)) {
     console.log(`❌ Error: Source SKILL.md not found at ${sourceSkillMd}`);
-    return;
+    process.exit(1);
   }
 
   if (!pathExists(sourceScriptsDir)) {
     console.log(`❌ Error: Source scripts directory not found at ${sourceScriptsDir}`);
-    return;
+    process.exit(1);
   }
 
   // Create target directory
@@ -94,7 +96,7 @@ function install() {
     fs.mkdirSync(targetDir, { recursive: true });
   } catch (err) {
     console.log(`❌ Error: Failed to create target directory: ${err.message}`);
-    return;
+    process.exit(1);
   }
 
   // Copy SKILL.md
@@ -102,7 +104,7 @@ function install() {
     fs.copyFileSync(sourceSkillMd, targetSkillMd);
   } catch (err) {
     console.log(`❌ Error: Failed to copy SKILL.md: ${err.message}`);
-    return;
+    process.exit(1);
   }
 
   // Copy scripts directory
@@ -110,7 +112,7 @@ function install() {
     copyDirRecursive(sourceScriptsDir, targetScriptsDir);
   } catch (err) {
     console.log(`❌ Error: Failed to copy scripts directory: ${err.message}`);
-    return;
+    process.exit(1);
   }
 
   // Success message
@@ -141,5 +143,5 @@ try {
   install();
 } catch (err) {
   console.log(`\n❌ Installation failed: ${err.message}\n`);
-  // Do not exit with error code - postinstall should not block npm install
+  process.exit(1);
 }

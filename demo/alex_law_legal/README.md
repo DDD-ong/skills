@@ -10,9 +10,10 @@ This skill provides expert legal research on property law, real estate transacti
 
 ```bash
 npm install -g github:DDD-ong/alex-law-legal
+alex-law-legal
 ```
 
-The skill is automatically deployed to `~/.openclaw/skills/alex_law_legal/` via the postinstall hook.
+The first command downloads the package. The second command deploys the skill files to `~/.openclaw/skills/alex_law_legal/`.
 
 ---
 

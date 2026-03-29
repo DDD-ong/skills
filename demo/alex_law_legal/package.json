@@ -1,9 +1,9 @@
 {
   "name": "alex-law-legal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenClaw skill for property/housing legal analysis via Alta Lex AI",
-  "scripts": {
-    "postinstall": "node ./bin/postinstall.mjs"
+  "bin": {
+    "alex-law-legal": "./bin/install.mjs"
   },
   "files": [
     "bin/",
@@ -14,6 +14,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/DDD-ong/alex-law-legal.git"
   }
 }
