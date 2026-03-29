@@ -123,7 +123,7 @@ function install() {
 
   if (isConfigured) {
     console.log('✅ Configuration found in openclaw.json');
-    console.log('\n🚀 Ready! Ask your OpenClaw agent any property/housing law question.\n');
+    console.log('\n🚀 Ready! Ask your OpenClaw agent any legal question.\n');
   } else {
     console.log('\n📋 Next steps:');
     console.log('   Add the following to ~/.openclaw/openclaw.json under "skills.entries":\n');

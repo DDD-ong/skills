@@ -1,8 +1,8 @@
 # Alex Law Legal ⚖️
 
-An OpenClaw skill for professional property and housing legal analysis via the Alta Lex AI platform.
+An OpenClaw skill for professional legal research and analysis via the Alta Lex AI platform.
 
-This skill provides expert legal research on property law, real estate transactions, tenancy disputes, building management, conveyancing, and stamp duty regulations.
+This skill provides expert legal research and analysis across all practice areas, powered by the Alta Lex AI platform.
 
 ---
 
@@ -43,15 +43,15 @@ Restart your OpenClaw session after updating the configuration.
 
 ## Usage
 
-Once configured, the skill is automatically invoked when you ask property or housing law questions:
+Once configured, the skill is automatically invoked when you ask legal questions:
 
 **Example questions:**
 
 - "What are my rights as a tenant if my landlord wants to increase the rent significantly in Hong Kong?"
 - "Explain the stamp duty requirements for property purchase in Hong Kong"
-- "What are the legal obligations of a building management company?"
-- "How does the Landlord and Tenant (Consolidation) Ordinance protect tenants?"
-- "What are the key steps in the property conveyancing process?"
+- "What are the key legal considerations for a cross-border M&A transaction?"
+- "How does GDPR affect data processing for companies operating in the EU?"
+- "What are the employer's obligations when terminating an employee in Hong Kong?"
 
 Analysis typically takes around 5 minutes. The skill will poll for results and notify you when complete.
 
@@ -63,7 +63,7 @@ The following parameters can be configured per query:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `practice_area` | `"Property Law"` | Legal practice area (e.g., Property Law, Tenancy Law, Conveyancing, Building Management) |
+| `practice_area` | `Auto-detect` | Legal practice area — auto-detected from query (e.g., Property Law, Corporate Law, Employment Law, Contract Law) |
 | `jurisdiction` | `"Hong Kong"` | Legal jurisdiction for the analysis |
 | `output_language` | `"English"` | Language for the response |
 | `pro` | off | Enable advanced research mode (uses more credits) |
