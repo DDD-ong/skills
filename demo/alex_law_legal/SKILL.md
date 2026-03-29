@@ -1,12 +1,12 @@
 ---
 name: alex_law_legal
-description: "Professional legal research and analysis via Alta Lex AI platform. Use when: (1) user asks about property law, real estate law, housing law, tenancy, lease, landlord-tenant disputes, building management, property transactions, conveyancing, or stamp duty, (2) user asks a legal question about buying/selling/renting property or housing regulations, (3) user explicitly requests Alta Lex legal analysis, (4) user asks about property ordinances, building codes, or land law. NOT for: general legal questions unrelated to property/housing, simple factual lookups, non-legal questions about real estate prices or market trends."
+description: "Professional legal research and analysis via Alta Lex AI platform. Use when: (1) user asks any legal question or requests legal analysis, (2) user asks about laws, regulations, ordinances, legal rights, obligations, or legal procedures in any practice area, (3) user explicitly requests Alta Lex legal analysis. NOT for: non-legal questions, simple factual lookups unrelated to law."
 metadata: { "openclaw": { "emoji": "⚖️", "requires": { "bins": ["python3"], "env": ["ALTA_LEX_USERNAME", "ALTA_LEX_PASSWORD"] }, "os": ["darwin", "linux"] } }
 ---
 
 # Alta Lex Legal Research Skill
 
-Query the Alta Lex AI platform for professional property/housing legal analysis. Results are streamed via SSE and typically take around 5 minutes to complete.
+Query the Alta Lex AI platform for professional legal analysis across all practice areas. Results are streamed via SSE and typically take around 5 minutes to complete.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ Configure in `~/.openclaw/openclaw.json`:
 
 ### Step 1: Identify the Legal Question
 
-Extract the core property/housing legal question from the user's message. If the user wrote in another language, rephrase the query into clear English. Include relevant context (jurisdiction, property type, specific scenario).
+Extract the core legal question from the user's message. If the user wrote in another language, rephrase the query into clear English. Include relevant context (jurisdiction, property type, specific scenario).
 
 **Important — Gather required parameters before proceeding:**
 
@@ -53,7 +53,7 @@ You MUST ask the user for the following information and store the answers in var
 
 | Question | Variable | Example / Default |
 |----------|----------|-------------------|
-| What is the practice area? | `$practice_area` | `"Property Law"` (default) |
+| What is the practice area? | `$practice_area` | Auto-detect from query (default: "General") |
 | What is the jurisdiction? | `$jurisdiction` | `"Hong Kong"` (default) |
 | What is the preferred output language? | `$language` | `"English"` (default) |
 
@@ -144,7 +144,7 @@ When `status` is `"error"`:
 | `--background` | `""` | Additional context for the query |
 | `--pro` | off | Enable advanced research mode (uses more credits) |
 
-Common practice areas: `"Property Law"`, `"Tenancy Law"`, `"Conveyancing"`, `"Building Management"`.
+Common practice areas: `"Property Law"`, `"Tenancy Law"`, `"Conveyancing"`, `"Building Management"`, `"Corporate Law"`, `"Employment Law"`, `"Contract Law"`, `"Intellectual Property"`, `"Criminal Law"`, `"Family Law"`, `"Tax Law"`, `"Banking & Finance"`, `"Competition Law"`, `"Regulatory & Compliance"`, `"Litigation"`, `"Arbitration"`.
 
 Adjust `--practice-area` and `--jurisdiction` based on the user's question context.
 
@@ -162,7 +162,7 @@ When delivering results via WhatsApp:
 **User (WhatsApp):** "I want to know what are my rights as a tenant if my landlord wants to increase the rent significantly in Hong Kong?"
 
 **Agent actions:**
-1. **Identify**: Property/tenancy law question; set `$practice_area = "Property Law"`, `$jurisdiction = "Hong Kong"`, `$language = "English"`
+1. **Identify**: Property/tenancy law question; set `$practice_area = "Tenancy Law"` (auto-detected), `$jurisdiction = "Hong Kong"`, `$language = "English"`
 2. **Start background analysis** with query: "What are the legal rights of a tenant when a landlord wants to significantly increase rent in Hong Kong? What protections does the Landlord and Tenant (Consolidation) Ordinance provide?"
 3. **Notify user**: "Consulting Alta Lex AI for professional analysis..."
 4. **Poll** every 5 minutes until status is `"complete"` or `"error"`
@@ -219,4 +219,4 @@ By using this skill, your legal queries and conversation context will be sent to
 
 ## Model Invocation Note
 
-This skill is designed to be autonomously invoked by the agent when it detects property/housing law questions in conversation. If you prefer manual-only invocation, set `disable-model-invocation: true` in the skill's frontmatter or OpenClaw configuration.
+This skill is designed to be autonomously invoked by the agent when it detects legal questions in conversation. If you prefer manual-only invocation, set `disable-model-invocation: true` in the skill's frontmatter or OpenClaw configuration.
