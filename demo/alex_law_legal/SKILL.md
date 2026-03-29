@@ -1,6 +1,6 @@
 ---
 name: alex_law_legal
-description: "Professional legal research, analysis, and drafting via Alta Lex AI platform. Use when: (1) user asks any legal question or requests legal analysis, (2) user asks about laws, regulations, ordinances, legal rights, obligations, or legal procedures in any practice area, (3) user requests drafting, reviewing, or preparing legal documents such as agreements, contracts, letters, memoranda, or other legal instruments, (4) user explicitly requests Alta Lex legal analysis. NOT for: non-legal questions, simple factual lookups unrelated to law."
+description: "Professional legal research and analysis via Alta Lex AI platform. Use when: (1) user asks any legal question or requests legal analysis, (2) user asks about laws, regulations, ordinances, legal rights, obligations, or legal procedures in any practice area, (3) user explicitly requests Alta Lex legal analysis. NOT for: non-legal questions, simple factual lookups unrelated to law."
 metadata: { "openclaw": { "emoji": "⚖️", "requires": { "bins": ["python3"], "env": ["ALTA_LEX_USERNAME", "ALTA_LEX_PASSWORD"] }, "os": ["darwin", "linux"] } }
 ---
 
