@@ -79,60 +79,67 @@ Run this command with `background:true` so it executes in the background. Do NOT
 **Important**: Immediately after starting, send the user a message:
 > "I'm consulting Alta Lex AI for a professional legal analysis of your question. This typically takes around 5 minutes. I'll keep you updated on the progress."
 
-### Step 3: Schedule Polling via OpenClaw Cron
+### Step 3: Schedule Auto-Notification via OpenClaw Cron
 
-Use `openclaw cron` to schedule periodic polling, ensuring results are reliably returned even if the current conversation context is lost.
+After starting the background analysis, immediately register a **temporary cron job** to poll for results and auto-reply to the user upon completion. This ensures the user receives the result even if the current conversation context is lost.
 
-Register a cron job immediately after starting the background analysis:
+Register the cron job:
 
-```
-openclaw cron --every 5m --command "python3 {baseDir}/scripts/alta_lex_poll.py poll --session-file \"$SESSION_FILE\"" --until-status complete --on-complete "reply" --on-error "reply"
+```bash
+openclaw cron create \
+  --name "alta-lex-poll-$SESSION_FILE" \
+  --every 5m \
+  --command "python3 {baseDir}/scripts/alta_lex_poll.py poll --session-file \"$SESSION_FILE\"" \
+  --on-complete "reply" \
+  --on-error "reply" \
+  --auto-cleanup
 ```
 
 This tells OpenClaw to:
 1. Execute the poll command every **5 minutes**
-2. Automatically terminate the cron job execution if the following boolean expression evaluates to true:
-IF (finished_at IS NOT NULL) OR (error IS NOT NULL) THEN STOP
-3. Trigger a reply to the user with the result upon completion
+2. Parse the poll output JSON and check the `status` field
+3. When `status` is `"running"` — do nothing, wait for the next poll cycle
+4. When `status` is `"complete"` — automatically reply to the user with the `content` field, then **stop and remove the cron job**, and clean up the session file (`rm "$SESSION_FILE"`)
+5. When `status` is `"error"` — automatically reply to the user with a polite error message, then **stop and remove the cron job**, and clean up the session file
 
-**If `openclaw cron` is not available**, fall back to manual polling — run the poll command yourself every 5 minutes:
+The `--auto-cleanup` flag ensures the cron job is automatically removed once it triggers a terminal status (`complete` or `error`).
+
+**The poll command returns JSON with these fields:**
+- `status`: `"running"` | `"complete"` | `"error"`
+- `content`: accumulated analysis text (present when `status` is `"complete"`)
+- `error`: error message (present when `status` is `"error"`)
+
+### Step 4: Automatic Result Delivery (via Cron)
+
+When the cron detects `status: "complete"`:
+1. The cron reads the full `content` from the poll output.
+2. **Output must use ONLY the original data returned by Alta Lex. Do NOT modify, rephrase, or alter any content. Present verbatim.**
+3. The cron triggers a reply to the user with the complete analysis (Markdown format).
+4. For **WhatsApp**: convert Markdown to WhatsApp-friendly format (see WhatsApp Formatting Rules below).
+5. The cron removes itself and cleans up: `rm "$SESSION_FILE"`
+
+No manual intervention is required — the cron handles the entire delivery lifecycle automatically.
+
+### Step 5: Automatic Error Handling (via Cron)
+
+When the cron detects `status: "error"`:
+1. The cron reads the `error` field from the poll output.
+2. The cron triggers a reply to the user with a polite error message:
+   > "I encountered an issue while consulting Alta Lex. Please try again later or rephrase your question."
+3. The cron removes itself and cleans up: `rm "$SESSION_FILE"`
+
+If authentication failed → verify credentials in `~/.openclaw/openclaw.json`.
+If session expired → the script auto-retries re-login once; if it still fails, the error is reported.
+
+### Step 6: Fallback — Manual Polling
+
+If `openclaw cron` is not available, fall back to manual polling:
 
 ```bash
 python3 {baseDir}/scripts/alta_lex_poll.py poll --session-file "$SESSION_FILE"
 ```
 
-The poll command returns JSON with these fields:
-- `status`: `"running"` | `"complete"` | `"error"`
-- `content`: accumulated analysis text so far
-- `error`: error message if status is `"error"`
-
-### Step 4: Send Progress Updates
-
-While `status` is `"running"`:
-- On each poll (every 5 mins), send the user a brief update:
-  > "Still analyzing... Alta Lex is working on your legal research."
-- Do NOT send the partial `content` to the user — wait for completion.
-
-**Note**: When using `openclaw cron`, the cron mechanism handles the polling loop automatically. You only need to handle the final result delivery (Step 5) or error handling (Step 6) when the cron triggers the reply callback.
-
-### Step 5: Deliver Final Result
-
-When `status` is `"complete"`:
-1. Read the full `content` from the poll output.
-2. **Output must use ONLY the original data returned by Alta Lex. Do NOT modify, rephrase, or alter any content. Present verbatim.**
-3. Format the legal analysis for the user (the content is Markdown).
-4. For **WhatsApp**: convert Markdown to WhatsApp-friendly format (see WhatsApp Formatting Rules below).
-5. Send the complete analysis to the user.
-6. Clean up: `rm "$SESSION_FILE"`
-
-### Step 6: Handle Errors
-
-When `status` is `"error"`:
-1. Read the `error` field from the poll output.
-2. If authentication failed → verify credentials in `~/.openclaw/openclaw.json`.
-3. If session expired → the script auto-retries re-login once; if it still fails, inform the user.
-4. Send user a polite error message:
-   > "I encountered an issue while consulting Alta Lex. Please try again later or rephrase your question."
+Repeat every 5 minutes until `status` is `"complete"` or `"error"`, then deliver results or error message to the user manually.
 
 ## Parameters Reference
 
