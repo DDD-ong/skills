@@ -1,0 +1,4 @@
+interface:
+  display_name: "Credits & Billing Agent"
+  short_description: "Credits 计费系统和 Stripe 支付集成"
+  default_prompt: "设计和实现 Credits 双池计费系统和 Stripe 支付集成。"

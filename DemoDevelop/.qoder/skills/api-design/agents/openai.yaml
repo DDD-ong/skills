@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Design Agent"
+  short_description: "RESTful API 契约设计"
+  default_prompt: "设计 RESTful API 端点，产出 OpenAPI 3.0 规范文档。"

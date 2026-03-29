@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legal Domain Knowledge Agent"
+  short_description: "法律行业领域知识支撑"
+  default_prompt: "提供法律行业领域知识，支持产品设计和功能开发决策。"

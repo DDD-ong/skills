@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Generation Agent"
+  short_description: "自动化测试计划和测试代码生成"
+  default_prompt: "基于需求验收标准和代码实现生成测试计划和测试代码。"

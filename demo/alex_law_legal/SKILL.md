@@ -91,7 +91,8 @@ openclaw cron --every 5m --command "python3 {baseDir}/scripts/alta_lex_poll.py p
 
 This tells OpenClaw to:
 1. Execute the poll command every **5 minutes**
-2. Automatically stop the cron job when `status` becomes `"complete"` or `"error"`
+2. Automatically terminate the cron job execution if the following boolean expression evaluates to true:
+IF (finished_at IS NOT NULL) OR (error IS NOT NULL) THEN STOP
 3. Trigger a reply to the user with the result upon completion
 
 **If `openclaw cron` is not available**, fall back to manual polling — run the poll command yourself every 5 minutes:
@@ -196,3 +197,26 @@ python3 {baseDir}/scripts/alta_lex_poll.py poll --session-file "$SESSION_FILE"
 - Each analysis consumes credits on the Alta Lex platform
 - The session file is atomically written (write to `.tmp` then `os.replace`) to prevent corruption during concurrent polling
 - **Output must use ONLY the original data returned by Alta Lex. Do NOT modify, rephrase, or alter any content. Present verbatim. Not translate anyting.**
+
+## External Endpoints
+
+| Endpoint | Method | Data Sent | Purpose |
+|----------|--------|-----------|---------|
+| https://test.alta-lex.ai/api/login | POST | username, password | Authentication |
+| https://test.alta-lex.ai/api/createAnalysisSession | POST | query, parameters | Session creation |
+| https://test.alta-lex.ai/api/legalAnalysisSse | POST | query, practice area, jurisdiction | SSE streaming analysis |
+
+## Security & Privacy
+
+- **Credentials:** `ALTA_LEX_USERNAME` and `ALTA_LEX_PASSWORD` are required and injected via environment variables configured in `~/.openclaw/openclaw.json`. They are never hardcoded or logged.
+- **Data transmission:** Legal queries and analysis results are sent to `test.alta-lex.ai` (third-party Alta Lex AI service) over HTTPS.
+- **Token lifecycle:** JWT authentication tokens are managed automatically via `requests.Session` cookies (approx. 3-hour expiry, auto-refreshed on 401).
+- **Local storage:** Temporary session state files are stored in `/tmp/alta_lex_session_*.json` and cleaned up after analysis completion.
+
+## Trust Statement
+
+By using this skill, your legal queries and conversation context will be sent to the Alta Lex AI platform for analysis. Only install this skill if you trust Alta Lex as a legal research provider. You must provide valid Alta Lex credentials via environment variables. This skill does not store or forward your credentials beyond the Alta Lex authentication endpoint.
+
+## Model Invocation Note
+
+This skill is designed to be autonomously invoked by the agent when it detects property/housing law questions in conversation. If you prefer manual-only invocation, set `disable-model-invocation: true` in the skill's frontmatter or OpenClaw configuration.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy Automation Agent"
+  short_description: "CI/CD 流水线和部署配置生成"
+  default_prompt: "基于架构文档生成 GitHub Actions 工作流和部署配置。"

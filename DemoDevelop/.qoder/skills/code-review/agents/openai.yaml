@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Review Agent"
+  short_description: "代码质量和安全审查"
+  default_prompt: "审查代码变更的质量、安全性和 Alta Lex 规范合规性。"

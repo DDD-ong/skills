@@ -1,0 +1,4 @@
+interface:
+  display_name: "Database Schema Design Agent"
+  short_description: "MySQL 数据库表结构和应用层权限设计"
+  default_prompt: "设计数据库表结构和应用层权限策略，生成 Alembic Migration 文件。"

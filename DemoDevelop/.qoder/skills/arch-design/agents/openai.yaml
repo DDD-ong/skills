@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Design Agent"
+  short_description: "系统架构设计和 ADR 记录"
+  default_prompt: "基于需求文档进行系统架构设计，产出 C4 模型文档和 ADR。"

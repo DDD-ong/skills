@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auth Design Agent"
+  short_description: "统一认证和授权体系设计"
+  default_prompt: "设计 FastAPI JWT 统一认证和基于角色的授权体系。"

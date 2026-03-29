@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Development Agent"
+  short_description: "React SPA 组件和页面开发"
+  default_prompt: "基于架构文档和设计稿开发 React SPA 前端组件和页面。"

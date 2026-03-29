@@ -1,0 +1,4 @@
+interface:
+  display_name: "PRD Analysis Agent"
+  short_description: "PRD 文档分析和需求提取"
+  default_prompt: "分析 PRD 文档，提取结构化需求并按 Epic > Feature > User Story 层级输出。"
