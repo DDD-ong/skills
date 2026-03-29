@@ -1,7 +1,7 @@
 {
   "name": "alex-law-legal",
   "version": "1.0.1",
-  "description": "OpenClaw skill for professional legal research and analysis via Alta Lex AI"
+  "description": "OpenClaw skill for professional legal research and analysis via Alta Lex AI",
   "bin": {
     "alex-law-legal": "./bin/install.mjs"
   },
@@ -10,7 +10,7 @@
     "SKILL.md",
     "scripts/"
   ],
-  "keywords": ["openclaw", "skill", "legal", "alta-lex", "legal-research"]
+  "keywords": ["openclaw", "skill", "legal", "alta-lex", "legal-research"],
   "license": "MIT",
   "repository": {
     "type": "git",
