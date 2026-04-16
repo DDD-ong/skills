@@ -1,0 +1,16 @@
+{
+  "site": "alta-lex",
+  "target_url": "https://test.alta-lex.ai/legalResearches",
+  "final_url": "https://test.alta-lex.ai/legalResearches",
+  "title": "Research - Alta Lex",
+  "framework": {
+    "nextjs": false,
+    "nuxt": false,
+    "react": false,
+    "vue2": false,
+    "vue3": false
+  },
+  "stores": [],
+  "top_strategy": "public",
+  "explored_at": "2026-04-08T00:57:59.827Z"
+}

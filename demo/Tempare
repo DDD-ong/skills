@@ -16,3 +16,8 @@ openclaw channels login --channel  discord --account alexlaw
 新加坡：https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 
 美国（弗吉尼亚）：https://dashscope-us.aliyuncs.com/compatible-mode/v
+
+
+
+
+channels.accounts.default.token

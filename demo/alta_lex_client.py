@@ -5,19 +5,23 @@ Alta Lex AI API Client
 支持登录认证（JWT Cookie）、会话管理和法律分析（SSE流式响应）。
 
 认证机制:
-    - 登录后服务端返回 JWT Token（HS256），存储在名为 "auth" 的 Cookie 中
-    - JWT Payload: {uid, exp, iat}，有效期约 3 小时
+    - JWT Token（HS256），通过 Cookie "auth" 传递
+    - 支持两种认证方式：
+      1. --token 直接传入 JWT（推荐，从浏览器 Cookie 获取）
+      2. -u/-p 用户名密码登录（需要 /api/login 端点可用）
     - requests.Session 自动管理 Cookie 生命周期
 
 使用方式:
-    python alta_lex_client.py -u <用户名> -p <密码> -q "你的法律问题"
-    python alta_lex_client.py -u <用户名> -p <密码> --list-sessions
-    python alta_lex_client.py -u <用户名> -p <密码> --session-history <SESSION_ID>
+    python alta_lex_client.py --token <JWT> -q "你的法律问题"
+    python alta_lex_client.py --token <JWT> --list-sessions
+    python alta_lex_client.py --token <JWT> --session-history <SESSION_ID>
 """
 
 import argparse
 import json
+import os
 import sys
+import threading
 from typing import Optional, Generator, Tuple
 
 import requests
@@ -91,17 +95,36 @@ class AltaLexClient:
     # 认证相关
     # ------------------------------------------------------------------
 
+    def set_token(self, token: str, cookie_name: Optional[str] = None):
+        """
+        直接设置认证 Token（无需调用 login）。
+
+        适用于从浏览器 Cookie 中提取 auth Token 后直接使用的场景。
+        Token 会被注入到 requests.Session 的 Cookie 中。
+
+        Args:
+            token: Token 字符串（从浏览器 Cookie 获取）。
+            cookie_name: Cookie 名称。默认自动推断：
+                         test.alta-lex.ai → "auth_test"
+                         其他 → "auth"
+        """
+        if cookie_name is None:
+            cookie_name = "auth_test" if "test." in self.base_url else "auth"
+        domain = self.base_url.split("//")[-1].split("/")[0]
+        self.session.cookies.set(cookie_name, token, domain=domain)
+
     def login(self, username: str, password: str) -> dict:
         """
         登录并获取 JWT Token。
 
-        服务端在响应中通过 Set-Cookie 设置 "auth" JWT Token，
-        requests.Session 会自动保存和发送该 Cookie。
+        注意: 此端点可能在某些环境中不可用（返回 404）。
+        如果不可用，请使用 set_token() 直接设置 JWT Token。
 
         Returns:
-            用户信息 dict，包含 uid, username, role, status, parent_uid, expires。
+            用户信息 dict。
         Raises:
             AuthenticationError: 用户名或密码错误。
+            APIError: 端点不可用。
         """
         resp = self._post("/api/login", json_data={
             "username": username,
@@ -117,22 +140,10 @@ class AltaLexClient:
         self.session.cookies.clear()
         return resp
 
-    def get_user_info(self) -> dict:
-        """
-        获取当前登录用户的详细信息。
-        也可用于验证 JWT Token 是否仍然有效。
-
-        Returns:
-            用户信息 dict，包含 uid, username, role, status, expiry_date, credit 等。
-        """
-        resp = self._post("/api/getUserInfo")
-        self.user_info = resp.get("data", {})
-        return self.user_info
-
     def is_authenticated(self) -> bool:
-        """检查当前会话是否仍然有效。"""
+        """通过获取会话列表来检查当前 Token 是否仍然有效。"""
         try:
-            self.get_user_info()
+            self.get_analysis_session_list()
             return True
         except (SessionExpiredError, APIError):
             return False
@@ -305,6 +316,77 @@ class AltaLexClient:
         return resp.get("chats", resp.get("data", []))
 
     # ------------------------------------------------------------------
+    # 快速启动 & 状态检查（OpenClaw 集成）
+    # ------------------------------------------------------------------
+
+    def quick_start_analysis(
+        self,
+        query: str,
+        practice_area: str = "",
+        jurisdiction: str = "",
+        output_language: str = "English",
+        background: str = "",
+        legal_research_pro: bool = False,
+    ) -> str:
+        """
+        快速启动法律分析：创建会话并发起 SSE 请求（后台消费流），立即返回 session_id。
+
+        用于 OpenClaw 异步工作流：启动分析 -> 返回 session_id -> cron 轮询检查结果。
+        """
+        session_id = self.create_analysis_session(query)
+        payload = {
+            "sessionId": session_id,
+            "query": query,
+            "practiceArea": practice_area,
+            "jurisdiction": jurisdiction,
+            "outputLanguage": output_language,
+            "background": background,
+            "legalResearchPro": legal_research_pro,
+        }
+        url = f"{self.base_url}/api/legalAnalysisSse"
+
+        def _consume_sse():
+            try:
+                resp = self.session.post(url, json=payload, stream=True, timeout=(10, 600))
+                resp.raise_for_status()
+                for _ in resp.iter_content(chunk_size=4096):
+                    pass
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_consume_sse, daemon=True)
+        t.start()
+        return session_id
+
+    def check_session_complete(self, session_id: str) -> dict:
+        """
+        检查分析会话是否完成。
+
+        Returns:
+            dict: {"status": "running"|"complete"|"error", "session_id": "...",
+                   "content": "...", "error": "..."}
+        """
+        try:
+            history = self.get_analysis_session_history(session_id)
+            chats = history.get("chats", [])
+            if not chats:
+                return {"status": "running", "session_id": session_id,
+                        "content": "", "error": ""}
+            last_chat = chats[-1]
+            answer = last_chat.get("answer", "")
+            if answer:
+                return {"status": "complete", "session_id": session_id,
+                        "content": answer, "error": ""}
+            return {"status": "running", "session_id": session_id,
+                    "content": "", "error": ""}
+        except SessionExpiredError as e:
+            return {"status": "error", "session_id": session_id,
+                    "content": "", "error": f"Session expired: {e}"}
+        except AltaLexError as e:
+            return {"status": "error", "session_id": session_id,
+                    "content": "", "error": str(e)}
+
+    # ------------------------------------------------------------------
     # 文件管理
     # ------------------------------------------------------------------
 
@@ -429,24 +511,39 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 简单查询
+  # 使用 JWT Token 认证（推荐，从浏览器 Cookie 获取）
+  python alta_lex_client.py --token <JWT_TOKEN> -q "What is contract law?"
+  python alta_lex_client.py --token <JWT_TOKEN> --list-sessions
+
+  # 使用环境变量传递 Token
+  export ALTA_LEX_TOKEN=<JWT_TOKEN>
+  python alta_lex_client.py --list-sessions
+
+  # 使用用户名密码登录（需要 /api/login 端点可用）
   python alta_lex_client.py -u Mplus -p 'PPD689#' -q "What is contract law?"
 
   # 指定法律领域和管辖区
-  python alta_lex_client.py -u Mplus -p 'PPD689#' \\
+  python alta_lex_client.py --token <JWT> \\
       -q "What are the requirements for a valid contract?" \\
       --practice-area "Contract Law" \\
       --jurisdiction "Hong Kong"
 
-  # 仅登录并列出会话
-  python alta_lex_client.py -u Mplus -p 'PPD689#' --list-sessions
-
   # 查看指定会话的聊天历史
-  python alta_lex_client.py -u Mplus -p 'PPD689#' --session-history <SESSION_ID>
+  python alta_lex_client.py --token <JWT> --session-history <SESSION_ID>
+
+  # OpenClaw 集成：快速启动
+  python alta_lex_client.py --token <JWT> --quick-start -q "Legal question"
+
+  # OpenClaw 集成：轮询检查
+  python alta_lex_client.py --token <JWT> --check-session <SESSION_ID>
         """,
     )
-    parser.add_argument("-u", "--username", required=True, help="登录用户名")
-    parser.add_argument("-p", "--password", required=True, help="登录密码")
+    auth_group = parser.add_argument_group("认证方式（二选一）")
+    auth_group.add_argument("--token", default=None,
+                            help="JWT Token（从浏览器 auth Cookie 获取，或设置 ALTA_LEX_TOKEN 环境变量）")
+    auth_group.add_argument("-u", "--username", default=None, help="登录用户名")
+    auth_group.add_argument("-p", "--password", default=None, help="登录密码")
+
     parser.add_argument("-q", "--query", help="法律查询问题")
     parser.add_argument("--practice-area", default="", help="法律领域 (如: Contract Law)")
     parser.add_argument("--jurisdiction", default="", help="司法管辖区 (如: Hong Kong)")
@@ -455,29 +552,77 @@ def main():
     parser.add_argument("--pro", action="store_true", help="启用 Legal Research Pro 模式")
     parser.add_argument("--list-sessions", action="store_true", help="列出所有分析会话")
     parser.add_argument("--session-history", metavar="SESSION_ID", help="查看指定会话的历史")
+    parser.add_argument("--quick-start", action="store_true",
+                        help="快速启动分析（立即返回 session_id JSON，用于 OpenClaw 集成）")
+    parser.add_argument("--check-session", metavar="SESSION_ID",
+                        help="检查分析会话状态（输出 JSON，用于 OpenClaw cron 轮询）")
     parser.add_argument("--base-url", default=None, help="API 基础 URL")
 
     args = parser.parse_args()
     client = AltaLexClient(base_url=args.base_url)
 
-    # 1. 登录
-    try:
-        print(f"[*] 正在登录 ({args.username})...")
-        user = client.login(args.username, args.password)
-        print(f"[+] 登录成功! 用户: {user.get('username')}, 角色: {user.get('role')}")
-    except (AuthenticationError, APIError) as e:
-        print(f"[-] 登录失败: {e}", file=sys.stderr)
+    # JSON 输出模式（用于 OpenClaw 集成）
+    json_mode = args.quick_start or args.check_session
+
+    # 1. 认证：优先 --token / ALTA_LEX_TOKEN，其次 -u/-p 登录
+    token = args.token or os.environ.get("ALTA_LEX_TOKEN")
+    if token:
+        client.set_token(token)
+        if not json_mode:
+            print("[+] 使用 JWT Token 认证")
+    elif args.username and args.password:
+        try:
+            if not json_mode:
+                print(f"[*] 正在登录 ({args.username})...")
+            user = client.login(args.username, args.password)
+            if not json_mode:
+                print(f"[+] 登录成功! 用户: {user.get('username')}, 角色: {user.get('role')}")
+        except AltaLexError as e:
+            if json_mode:
+                print(json.dumps({"status": "error", "session_id": "",
+                                  "content": "", "error": f"Login failed: {e}"}))
+            else:
+                print(f"[-] 登录失败: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        msg = "需要认证：使用 --token <JWT> 或 -u <用户名> -p <密码>，或设置 ALTA_LEX_TOKEN 环境变量"
+        if json_mode:
+            print(json.dumps({"status": "error", "session_id": "",
+                              "content": "", "error": msg}))
+        else:
+            print(f"[-] {msg}", file=sys.stderr)
         sys.exit(1)
 
-    # 2. 获取用户详细信息
-    try:
-        info = client.get_user_info()
-        print(f"[*] UID: {info.get('uid')}, 积分: {info.get('credit', 'N/A')}, "
-              f"到期: {info.get('expiry_date', 'N/A')}")
-    except AltaLexError as e:
-        print(f"[!] 获取用户信息失败: {e}")
+    # -- OpenClaw 集成：快速启动分析 --
+    if args.quick_start:
+        if not args.query:
+            print(json.dumps({"status": "error", "session_id": "",
+                              "content": "", "error": "Missing --query (-q)"}))
+            sys.exit(1)
+        try:
+            session_id = client.quick_start_analysis(
+                query=args.query,
+                practice_area=args.practice_area,
+                jurisdiction=args.jurisdiction,
+                output_language=args.output_language,
+                background=args.background,
+                legal_research_pro=args.pro,
+            )
+            print(json.dumps({"status": "started", "session_id": session_id,
+                              "content": "", "error": ""}))
+        except AltaLexError as e:
+            print(json.dumps({"status": "error", "session_id": "",
+                              "content": "", "error": str(e)}))
+            sys.exit(1)
+        return
 
-    # 3. 列出会话
+    # -- OpenClaw 集成：检查会话状态 --
+    if args.check_session:
+        result = client.check_session_complete(args.check_session)
+        print(json.dumps(result))
+        sys.exit(0 if result["status"] in ("complete", "running") else 1)
+
+    # 2. 列出会话
     if args.list_sessions:
         try:
             sessions = client.get_analysis_session_list()
@@ -494,7 +639,7 @@ def main():
         if not args.query and not args.session_history:
             return
 
-    # 4. 查看会话历史
+    # 3. 查看会话历史
     if args.session_history:
         try:
             history = client.get_analysis_session_history(args.session_history)
@@ -510,7 +655,7 @@ def main():
         if not args.query:
             return
 
-    # 5. 执行法律分析
+    # 4. 执行法律分析
     if args.query:
         try:
             print(f"\n[*] 创建新分析会话...")

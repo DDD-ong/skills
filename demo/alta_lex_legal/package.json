@@ -1,0 +1,29 @@
+{
+  "name": "alta-lex-legal",
+  "version": "2.0.0",
+  "description": "OpenClaw skill for full Legal AI Assistant (11 modules) via Alta Lex platform",
+  "bin": {
+    "alta-lex-legal": "./bin/install.mjs"
+  },
+  "files": [
+    "bin/",
+    "SKILL.md",
+    "scripts/"
+  ],
+  "keywords": [
+    "openclaw",
+    "skill",
+    "legal",
+    "alta-lex",
+    "contract",
+    "compliance",
+    "due-diligence",
+    "translation",
+    "legal-research"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DDD-ong/alta-lex-legal.git"
+  }
+}

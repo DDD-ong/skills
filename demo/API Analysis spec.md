@@ -1,66 +1,67 @@
-# Alta Lex AI 平台 — API 技术调研报告
+# Alta Lex AI Platform — API & Integration Spec
 
-## 1. 目标
+## 1. Overview
 
-1. 网站地址：https://test.alta-lex.ai/login （类似 OpenAI Chat 的法律 AI 平台）
-2. 调研目的：构建封装好的 Python 脚本，实现登录认证、会话管理和 API 交互
-3. 最终目标：将脚本作为可复用的 skill，集成到 GPT 等系统中调用
+Alta Lex AI (`https://test.alta-lex.ai`) is a legal AI platform offering professional legal research, contract drafting, document review, and translation. This document covers the complete API surface and two integration layers:
 
-## 2. 具体要求
+- **Tier 1 (Development)**: `opencli alta-lex` commands for interactive testing on macOS with Chrome
+- **Tier 2 (Production)**: Python `alta_lex_client.py` for programmatic use on Linux via OpenClaw + Discord
 
-1. 首先进行 API 接口调研，选择一个简单场景制作 demo
-2. 用户名密码可通过命令行参数输入，支持配置化
-3. 提供完整的 Python 代码示例，包含错误处理
-4. 代码模块化设计，便于后续集成
-
----
-
-## 3. 技术调研结果
-
-### 3.1 网站技术栈
-
-| 项目 | 详情 |
-|------|------|
-| **前端框架** | Umi.js (基于 React 的企业级框架) |
-| **构建工具** | Webpack (代码分割、异步加载) |
-| **Web 服务器** | Nginx 1.25.5 |
-| **API 风格** | RESTful JSON API |
-| **实时通信** | Server-Sent Events (SSE) |
-| **部署** | HTTPS，启用 HSTS |
-
-### 3.2 登录认证机制 — JWT Token (Cookie-Based)
-
-**认证方式: JWT Token，通过 Cookie 传递**
+## 2. Architecture
 
 ```
-┌─────────┐     POST /api/login        ┌─────────┐
-│  Client  │ ──── {username, password} ───▶│  Server  │
-│          │                              │          │
-│          │◀── Set-Cookie: auth=<JWT> ───│          │
-│          │    Set-Cookie: acw_tc=...    │          │
-│          │    Body: {status, data}      │          │
-└─────────┘                              └─────────┘
++-- Tier 1: Development (macOS + Chrome) --------------------------+
+|  opencli alta-lex <command>                                       |
+|  Strategy: cookie (reuses Chrome browser session)                 |
+|  9 YAML CLI commands for interactive API testing                  |
++-------------------------------------------------------------------+
+                              |
+                    API discovery & validation
+                              v
++-- Tier 2: Production (Linux / OpenClaw + Discord) ----------------+
+|  python3 alta_lex_client.py                                       |
+|  Auth: programmatic login via env vars                            |
+|                                                                   |
+|  User (Discord) -> OpenClaw Agent                                 |
+|    -> --quick-start -q "query"  (returns session_id immediately)  |
+|    -> openclaw cron --check-session (polls every 5 min)           |
+|    -> auto-reply to Discord on completion                         |
++-------------------------------------------------------------------+
+                              |
+                              v
++-- Alta Lex API Server ----------------------------------------+
+|  https://test.alta-lex.ai/api/*                               |
+|  Auth: JWT Cookie (HS256, ~3h expiry)                         |
+|  Streaming: SSE (Server-Sent Events)                          |
+|  Framework: Umi.js (React), Nginx 1.25.5, HTTPS + HSTS       |
++---------------------------------------------------------------+
 ```
 
-**JWT Token 结构:**
+## 3. Authentication
+
+**Method**: JWT Token via HTTP-only Cookie
 
 ```
-Header:  {"alg": "HS256", "typ": "JWT"}
-Payload: {"uid": "fd007687-...", "exp": 1773584860, "iat": 1773574060}
+Client  --POST /api/login {username, password}-->  Server
+Client  <--Set-Cookie: auth=<JWT>-----------------  Server
 ```
 
-- **签名算法**: HS256 (HMAC-SHA256)
-- **有效期**: 约 3 小时 (exp - iat ≈ 10800 秒)
-- **Cookie 名称**: `auth`
-- **Cookie 属性**: HTTP-only (前端 JavaScript 无法读取)
-- **附加 Cookie**: `acw_tc` (CDN/负载均衡跟踪 Cookie)
+| Property | Value |
+|----------|-------|
+| Algorithm | HS256 (HMAC-SHA256) |
+| Cookie name | `auth` |
+| Cookie attributes | HTTP-only |
+| Payload | `{uid, exp, iat}` |
+| Validity | ~3 hours (exp - iat = 10800s) |
+| Additional cookies | `acw_tc` (CDN tracking) |
+| CSRF | None (simplifies programmatic access) |
+| CAPTCHA | None |
 
-**登录响应示例:**
-
+**Login response:**
 ```json
 {
   "status": "success",
-  "message": "登录成功",
+  "message": "Login successful",
   "data": {
     "uid": "fd007687-53b5-4847-a376-8b70c48e9e9a",
     "username": "***",
@@ -68,321 +69,252 @@ Payload: {"uid": "fd007687-...", "exp": 1773584860, "iat": 1773574060}
     "status": "1",
     "parent_uid": "123456",
     "expires": "2026-03-15T22:19:37.940208+08:00"
-  },
-  "traceId": "1773573577492-0de56eb6"
+  }
 }
 ```
 
-### 3.3 会话保持和 Token 管理策略
+**Error codes:**
+| Code | Meaning |
+|------|---------|
+| `A01001` | Not logged in or session expired |
+| HTTP 401 | Unauthorized |
+| HTTP 403 | Forbidden |
 
-| 机制 | 说明 |
-|------|------|
-| **Token 存储** | 服务端通过 `Set-Cookie` 头设置 JWT 到 `auth` Cookie |
-| **自动发送** | 浏览器/requests.Session 自动在后续请求中携带 Cookie |
-| **Token 刷新** | 每次调用 `/api/login` 获取新 Token；无显式 refresh 机制 |
-| **会话验证** | 通过 `POST /api/getUserInfo` 验证 Token 有效性 |
-| **过期处理** | 返回错误码 `A01001`："Not logged in or session expired" |
-| **登出** | `POST /api/logout` 清除服务端会话 |
+## 4. API Endpoints
 
-### 3.4 安全验证措施
+### 4.1 Unified Response Format
 
-| 安全措施 | 状态 | 说明 |
-|----------|------|------|
-| **CSRF Token** | ❌ 未发现 | 页面中无隐藏 CSRF 字段 |
-| **验证码 (CAPTCHA)** | ❌ 无 | 登录无验证码验证 |
-| **速率限制** | ⚠️ 未检测到提示 | 无明显的频率限制错误 |
-| **CSP (内容安全策略)** | ✅ 已启用 | `default-src 'self'` |
-| **HSTS** | ✅ 已启用 | `max-age=63072000; includeSubDomains; preload` |
-| **X-Frame-Options** | ✅ DENY | 防止 Clickjacking |
-| **X-XSS-Protection** | ✅ `1; mode=block` | XSS 防护 |
-| **HTTP-only Cookie** | ✅ 已启用 | 前端 JS 无法读取 auth Cookie |
-| **Referrer-Policy** | ✅ `strict-origin-when-cross-origin` | 限制 Referer 泄露 |
-
-**对 Python 客户端的影响:**
-- 无 CSRF Token → 简化了 API 调用（无需提取隐藏字段）
-- 无 CAPTCHA → 可直接程序化登录
-- JWT Cookie 自动管理 → `requests.Session` 天然支持
-
----
-
-## 4. API 接口文档
-
-### 4.1 统一响应格式
-
-**成功响应:**
+**Success:**
 ```json
-{
-  "status": "success",
-  "message": "...",
-  "data": { ... },
-  "traceId": "1773574060260-980fda11"
-}
+{"status": "success", "message": "...", "data": {...}, "traceId": "..."}
 ```
 
-**错误响应:**
+**Error:**
 ```json
 {
   "status": "error",
-  "error": {
-    "code": "A01001",
-    "message": "Not logged in or session expired. Please log in again.",
-    "details": null,
-    "timestamp": "2026-03-15T19:06:34.839149",
-    "path": "..."
-  },
+  "error": {"code": "A01001", "message": "...", "details": null, "timestamp": "...", "path": "..."},
   "traceId": ""
 }
 ```
 
-### 4.2 认证 API
+### 4.2 Authentication
 
-#### POST /api/login
-- **请求体**: `{"username": "...", "password": "..."}`
-- **响应**: 用户信息 + Set-Cookie (auth JWT)
-- **失败消息**: "Incorrect username or password"
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/api/login` | POST | `{username, password}` | User info + Set-Cookie |
+| `/api/logout` | POST | `{}` | Success message |
+| `/api/getUserInfo` | POST | `{}` | Full user info (uid, credit, expiry_date) |
 
-#### POST /api/logout
-- **请求体**: `{}`
-- **响应**: `{"status": "success", "message": "登出成功"}`
+### 4.3 Legal Research (Core)
 
-#### POST /api/getUserInfo
-- **请求体**: `{}`
-- **响应**: 完整用户信息（uid, username, role, status, expiry_date, credit 等）
+| Endpoint | Method | Body/Params | Response |
+|----------|--------|-------------|----------|
+| `/api/createAnalysisSession` | POST | `{query}` | `{sessionId: "UUID"}` (top-level) |
+| `/api/legalAnalysisSse` | POST | `{sessionId, query, practiceArea, jurisdiction, outputLanguage, background, legalResearchPro}` | SSE stream |
+| `/api/getAnalysisSessionList` | GET | - | `{chats: [{sessionId, sessionName, title}]}` |
+| `/api/getAnalysisSessionHistory` | GET | `?sessionId=UUID` | `{chats: [{chatId, query, answer, status}], researchType}` |
 
-### 4.3 法律研究 API (Legal Research) — 核心功能
-
-#### POST /api/createAnalysisSession
-创建新的分析会话。
-
-- **请求体**: `{"query": "查询描述"}`
-- **响应**:
-```json
-{
-  "status": "success",
-  "message": "",
-  "data": null,
-  "traceId": "...",
-  "sessionId": "56116b50-f16f-4180-b1b7-abde5a8f78be"
-}
+**SSE Stream Format (`legalAnalysisSse`):**
+```
+: init                                              <- comment (skip)
+: heartbeat 1                                       <- comment (skip)
+data: {"message": "### L", "is_finished": false}    <- text chunk
+data: {"message": "egal ", "is_finished": false}    <- text chunk
+data: {"message": "...",  "is_finished": true}      <- final chunk
 ```
 
-#### POST /api/legalAnalysisSse
-发起法律分析，以 SSE 流式返回结果。
+- Analysis typically takes **5-8 minutes**
+- Heartbeats sent during processing to keep connection alive
+- `message`: text fragment (~5 chars per chunk)
+- `is_finished: true`: end of stream
 
-- **请求体**:
-```json
-{
-  "sessionId": "UUID",
-  "query": "法律问题",
-  "practiceArea": "Contract Law",
-  "jurisdiction": "Hong Kong",
-  "outputLanguage": "English",
-  "background": "背景信息",
-  "legalResearchPro": false
-}
-```
-- **响应类型**: `text/event-stream; charset=utf-8`
-- **SSE 数据流格式**:
+### 4.4 Drafting
 
-```
-: init                                          ← 初始化信号 (SSE 注释)
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/api/getDraftSessionList` | GET | - | Session list |
+| `/api/createDraftSession` | POST | `{scenario, position, industry, contractType, governingLaw, language}` | `{sessionId}` |
 
-: heartbeat 1                                   ← 心跳保活 (SSE 注释)
+### 4.5 Review
 
-data: {"message": "### L", "is_finished": false} ← 文本片段
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/api/listFiles` | POST | `{type: "review"}` | File list |
 
-data: {"message": "egal ", "is_finished": false} ← 文本片段
+### 4.6 Translation
 
-data: {"message": "...",  "is_finished": true}   ← 最后一个片段
-```
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/api/getTranslateSessionList` | GET | - | Session list |
+| `/api/createTranslateSession` | POST | `{sourceLanguage, targetLanguage, fileUrl}` | `{sessionId}` |
 
-**SSE 事件 data 字段:**
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `message` | string | 文本片段（约 5 个字符一个 chunk） |
-| `is_finished` | boolean | `true` 表示流结束 |
+### 4.7 Workflows
 
-**注意**: 分析过程通常需要 **5-8 分钟**，在此期间持续发送心跳。
+| Endpoint | Method | Body | Response |
+|----------|--------|------|----------|
+| `/api/getSessionList/{type}` | GET | - | Session list |
 
-#### GET /api/getAnalysisSessionList
-获取所有分析会话列表。
+Types: `workflow`, `ipoCheckList`, `templateAndTermSheet`, `negotiationPlaybook`, `contractCompare`
 
-- **响应**:
-```json
-{
-  "status": "success",
-  "chats": [
-    {"sessionId": "UUID", "sessionName": "...", "title": "..."},
-    ...
-  ]
-}
-```
+## 5. opencli Command Reference (Tier 1 - Development)
 
-#### GET /api/getAnalysisSessionHistory?sessionId=UUID
-获取指定会话的完整聊天历史。
+All commands use `strategy: cookie` and require Chrome to be logged in at `test.alta-lex.ai`.
 
-- **响应**:
-```json
-{
-  "status": "success",
-  "chats": [
-    {"chatId": "...", "query": "...", "answer": "完整 Markdown 回答", "status": "..."}
-  ],
-  "researchType": "search"
-}
-```
+| Command | Description | Key Args | Example |
+|---------|-------------|----------|---------|
+| `user-info` | Verify auth, show user info | - | `opencli alta-lex user-info` |
+| `legal-research` | Start legal analysis | `<query>`, `--wait`, `--practice_area`, `--jurisdiction` | `opencli alta-lex legal-research "contract law?"` |
+| `sessions` | List sessions by type | `--type` (analysis/draft/translate/workflow) | `opencli alta-lex sessions --type analysis` |
+| `analysis-sessions` | List analysis sessions | `--limit` | `opencli alta-lex analysis-sessions` |
+| `session-history` | View session chat history | `<session_id>` | `opencli alta-lex session-history UUID` |
+| `list-files` | List uploaded files | `--type` | `opencli alta-lex list-files` |
+| `create-draft` | Create a draft session | `<scenario>`, `--position`, `--industry`, etc. | `opencli alta-lex create-draft "NDA" --position Buyer ...` |
+| `draft-sessions` | List draft sessions | `--limit` | `opencli alta-lex draft-sessions` |
+| `translate-sessions` | List translate sessions | `--limit` | `opencli alta-lex translate-sessions` |
 
-### 4.4 其他功能模块 API
+**legal-research modes:**
+- **Quick mode** (default): `opencli alta-lex legal-research "query"` -> returns `session_id` immediately
+- **Wait mode**: `opencli alta-lex legal-research "query" --wait` -> blocks until SSE completes (5-8 min)
 
-#### 草稿 (Drafting)
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/getDraftSessionList` | GET | 获取草稿列表 |
-| `/api/createDraftSession` | POST | 创建草稿（需要 scenario, position, industry, contractType, governingLaw, language） |
+YAML definitions: `~/.opencli/clis/alta-lex/*.yaml`
 
-#### 审查 (Review)
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/listFiles` | POST | 列出文件（`{"type": "review"}`） |
+## 6. Python Client Reference (Tier 2 - Production)
 
-#### 翻译 (Translate)
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/getTranslateSessionList` | GET | 获取翻译列表 |
-| `/api/createTranslateSession` | POST | 创建翻译（需要 sourceLanguage, targetLanguage, fileUrl） |
+**File**: `scripts/alta_lex_client.py` (single file, depends only on `requests`)
 
-#### 工作流 (Workflows)
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/getSessionList/workflow` | GET | 获取工作流列表 |
-
----
-
-## 5. Python 客户端使用说明
-
-### 5.1 文件结构
-
-```
-demo/
-├── alta_lex_client.py    # 客户端核心代码（AltaLexClient 类 + CLI）
-└── API Analysis spec.md  # 本文档
-```
-
-### 5.2 依赖
-
-```
-pip install requests
-```
-
-（仅依赖 `requests` 库，无其他第三方依赖）
-
-### 5.3 CLI 使用
+### CLI Usage
 
 ```bash
-# 登录并列出所有会话
-python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' --list-sessions
+# Quick-start (OpenClaw integration - returns JSON)
+python3 alta_lex_client.py -u USER -p PASS --quick-start -q "legal question" \
+  --practice-area "Contract Law" --jurisdiction "Hong Kong"
+# Output: {"status": "started", "session_id": "UUID", "content": "", "error": ""}
 
-# 查看指定会话的历史
-python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' --session-history <SESSION_ID>
+# Check session status (OpenClaw cron polling - returns JSON)
+python3 alta_lex_client.py -u USER -p PASS --check-session "UUID"
+# Output: {"status": "running|complete|error", "session_id": "...", "content": "...", "error": "..."}
 
-# 发起法律分析查询（SSE 流式输出）
-python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' \
-    -q "What are the requirements for a valid contract?" \
-    --practice-area "Contract Law" \
-    --jurisdiction "Hong Kong"
+# Full foreground analysis (SSE streaming)
+python3 alta_lex_client.py -u USER -p PASS -q "legal question"
 
-# 启用 Legal Research Pro 模式
-python3 ~/workspace/demo/alta_lex_client.py -u *** -p '***' \
-    -q "..." --pro
+# List sessions
+python3 alta_lex_client.py -u USER -p PASS --list-sessions
+
+# Session history
+python3 alta_lex_client.py -u USER -p PASS --session-history UUID
 ```
 
-### 5.4 作为 Python 模块调用
+### Python API
 
 ```python
 from alta_lex_client import AltaLexClient
 
 client = AltaLexClient()
-
-# 登录
 client.login("username", "password")
 
-# 验证会话
-if client.is_authenticated():
-    print("Token 有效")
+# Quick start (non-blocking)
+session_id = client.quick_start_analysis(query="...", practice_area="...", jurisdiction="...")
 
-# 获取 JWT Token（可保存供其他系统使用）
-jwt_token = client.get_auth_token()
+# Check completion
+result = client.check_session_complete(session_id)
+# {"status": "complete", "session_id": "...", "content": "full analysis text", "error": ""}
 
-# 便捷方法：一步完成分析
-session_id, full_text = client.legal_analysis(
-    query="What is contract law?",
-    practice_area="Contract Law",
-    jurisdiction="Hong Kong",
-)
+# Full analysis (blocking, SSE streaming)
+session_id, full_text = client.legal_analysis(query="...", practice_area="...", jurisdiction="...")
 
-# 流式接收（逐 chunk 处理）
-session_id = client.create_analysis_session("query")
-for event in client.legal_analysis_sse(session_id=session_id, query="query"):
-    print(event.message, end="", flush=True)
-    if event.is_finished:
-        break
-
-# 查看历史
+# Other operations
 sessions = client.get_analysis_session_list()
 history = client.get_analysis_session_history(session_id)
-
-# 登出
-client.logout()
+drafts = client.get_draft_session_list()
+files = client.list_files(file_type="review")
 ```
 
-### 5.5 异常处理
+### Exception Hierarchy
 
-```python
-from alta_lex_client import (
-    AltaLexClient, AuthenticationError, SessionExpiredError, APIError
-)
-
-client = AltaLexClient()
-try:
-    client.login("user", "pass")
-except AuthenticationError:
-    print("用户名或密码错误")
-except SessionExpiredError:
-    print("会话已过期，需重新登录")
-except APIError as e:
-    print(f"API 错误: {e}")
+```
+AltaLexError
+  +-- AuthenticationError    (invalid credentials)
+  +-- SessionExpiredError    (JWT expired, code A01001)
+  +-- APIError               (general API failures)
 ```
 
-### 5.6 集成到 Skill 框架
+## 7. OpenClaw Integration (Discord Workflow)
 
-`AltaLexClient` 类设计为可独立使用的模块：
+**SKILL.md**: `demo/alex_law_legal/SKILL.md`
 
-1. **无状态依赖**: 仅依赖 `requests.Session` 管理 Cookie
-2. **错误分层**: `AltaLexError` → `AuthenticationError` / `SessionExpiredError` / `APIError`
-3. **SSE 流式**: `legal_analysis_sse()` 返回 Generator，适合流式处理
-4. **便捷封装**: `legal_analysis()` 一步完成创建会话 + 收集完整响应
-5. **Token 导出**: `get_auth_token()` 可提取 JWT 供其他系统使用
+```
+User (Discord) asks legal question
+  -> OpenClaw detects legal query via skill description
+  -> Step 1: Extract query, practice_area, jurisdiction
+  -> Step 2: python3 alta_lex_client.py --quick-start -q "..." (background:true)
+  -> Step 3: openclaw cron create --every 5m --check-session UUID
+  -> Step 4: Cron detects "complete" -> auto-reply to Discord -> cleanup
+```
 
----
+Key design decisions:
+- **No session files**: State managed server-side via `session_id`
+- **No separate poll script**: `--check-session` merged into `alta_lex_client.py`
+- **JSON output**: `--quick-start` and `--check-session` output pure JSON for cron parsing
+- **Linux compatible**: Python + requests only, no Chrome/browser dependency
 
-## 6. 已验证的功能
+## 8. Practice Areas
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 登录 (login) | ✅ 已验证 | JWT Token 自动保存到 Cookie |
-| 获取用户信息 | ✅ 已验证 | 返回 uid, credit, expiry_date 等 |
-| 列出会话 | ✅ 已验证 | 返回所有历史会话列表 |
-| 查看会话历史 | ✅ 已验证 | 返回完整 Q&A 历史 |
-| 创建分析会话 | ✅ 已验证 | 返回新的 sessionId |
-| SSE 流式分析 | ✅ 已验证 | 接收 `data: {"message", "is_finished"}` 格式 |
-| 登出 | ✅ 已验证 | 清除服务端会话 |
+| Area | Area |
+|------|------|
+| Property Law | Tenancy Law |
+| Conveyancing | Building Management |
+| Corporate Law | Employment Law |
+| Contract Law | Intellectual Property |
+| Criminal Law | Family Law |
+| Tax Law | Banking & Finance |
+| Competition Law | Regulatory & Compliance |
+| Litigation | Arbitration |
 
----
+## 9. Security
 
-## 7. 注意事项与限制
+| Measure | Status |
+|---------|--------|
+| HTTPS | Enabled |
+| HSTS | `max-age=63072000; includeSubDomains; preload` |
+| HTTP-only Cookie | Enabled (JS cannot read auth cookie) |
+| X-Frame-Options | DENY |
+| X-XSS-Protection | `1; mode=block` |
+| CSP | `default-src 'self'` |
+| Referrer-Policy | `strict-origin-when-cross-origin` |
+| CSRF Token | None (simplifies API access) |
+| CAPTCHA | None |
 
-1. **分析耗时**: 法律分析通常需要 5-8 分钟，SSE 连接需保持长时间打开
-2. **Token 有效期**: JWT 约 3 小时过期，长期使用需定期重新登录
-3. **积分消耗**: 每次分析消耗积分（credit），需监控余额
-4. **无公开 API 文档**: `/docs` 页面需登录且内容为空，所有 API 信息通过逆向工程获取
-5. **SSE 心跳**: 在分析处理期间，服务端发送 `: heartbeat N` 注释保持连接
+## 10. Troubleshooting
+
+| Issue | Environment | Solution |
+|-------|-------------|----------|
+| "Not logged in or session expired" | Both | Re-login; JWT valid ~3h |
+| opencli returns empty/error | macOS | Ensure Chrome is logged in at test.alta-lex.ai |
+| `--check-session` returns "running" indefinitely | Linux | Analysis may take up to 10 min; increase cron patience |
+| `--quick-start` returns error | Linux | Check credentials in env vars; verify network to test.alta-lex.ai |
+| SSE timeout | Both | Analysis typically 5-8 min; 10 min timeout is safety net |
+| Credit insufficient | Both | Check credit via `user-info` / `get_user_info()` |
+
+## 11. File Structure
+
+```
+demo/
++-- API Analysis spec.md                  # This document
++-- alta_lex_client.py                    # Python client (standalone copy)
++-- alex_law_legal/
+    +-- SKILL.md                          # OpenClaw skill definition
+    +-- scripts/
+        +-- alta_lex_client.py            # Python client (skill copy)
+
+~/.opencli/clis/alta-lex/
++-- legal-research.yaml                   # SSE analysis (quick/wait modes)
++-- sessions.yaml                         # Unified session listing
++-- list-files.yaml                       # File listing
++-- user-info.yaml                        # Auth verification
++-- analysis-sessions.yaml                # Analysis session listing
++-- session-history.yaml                  # Session chat history
++-- create-draft.yaml                     # Draft creation
++-- draft-sessions.yaml                   # Draft listing
++-- translate-sessions.yaml               # Translation listing
+```
