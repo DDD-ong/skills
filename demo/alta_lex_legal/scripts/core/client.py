@@ -44,10 +44,10 @@ class BaseClient:
     Alta Lex AI 平台基础 HTTP 客户端。
 
     认证: Authorization Header 传递 Session ID
-    Base URL: https://api.alta-lex.ai/api (可通过环境变量 ALTA_LEX_BASE_URL 覆盖)
+    Base URL: https://test.alta-lex.ai/api (可通过环境变量 ALTA_LEX_BASE_URL 覆盖)
     """
 
-    DEFAULT_BASE_URL = "https://api.alta-lex.ai/api"
+    DEFAULT_BASE_URL = "https://test.alta-lex.ai/api"
     SESSION_CACHE_FILE = os.path.join(
         os.path.expanduser("~"), ".openclaw", "skills", "alta_lex_legal", ".session_cache"
     )

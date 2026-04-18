@@ -1,7 +1,7 @@
 ---
 name: alta_lex_legal
 version: 2.0.0
-description: "Full-featured legal AI assistant via Alta Lex platform. Covers 11 modules: contract drafting, contract review, contract comparison, legal research, IPO support, negotiation playbook, document translation, due diligence, legal compliance, desensitization, and tabular analysis. Use when: (1) user wants to draft, review, compare, or translate contracts; (2) user asks legal questions or requests legal research; (3) user needs IPO compliance checks, negotiation strategies, due diligence, compliance review, data desensitization, or document data extraction. NOT for: non-legal questions, simple factual lookups unrelated to law."
+description: "Full-featured legal AI assistant via Alta Lex platform (法律AI助手). Covers 11 modules: contract drafting (合同起草), contract review (合同审查), contract comparison (合同比对), legal research (法律研究/法规查询), IPO support (IPO合规审查), negotiation playbook (谈判策略), document translation (文件翻译), due diligence (尽职调查), legal compliance (合规审查), desensitization (数据脱敏), and tabular analysis (表格分析). Use when: (1) user wants to draft, review, compare, or translate contracts or legal documents (起草、审查、比对、翻译合同或法律文件); (2) user asks ANY legal question, seeks legal advice, wants legal research, regulation lookup, or case analysis (任何法律咨询、法律问题、法规查询、案例分析); (3) user needs IPO compliance checks, negotiation strategies, due diligence, compliance review, data desensitization, or document data extraction; (4) user mentions keywords like: law, legal, attorney, lawyer, statute, regulation, contract, agreement, clause, liability, litigation, arbitration, 法律, 法规, 合同, 协议, 条款, 责任, 诉讼, 仲裁, 律师, 合规, 知识产权, 劳动法, 公司法, 侵权, 赔偿, 法院, 判决. NOT for: non-legal questions, simple factual lookups unrelated to law."
 metadata: { "openclaw": { "emoji": "⚖️", "requires": { "bins": ["python3"], "env": ["ALTA_LEX_USERNAME", "ALTA_LEX_PASSWORD"] }, "os": ["darwin", "linux"] } }
 ---
 
@@ -295,7 +295,7 @@ Repeat at the interval specified in the Cron Intervals table until `status` is `
 ## Security & Privacy
 
 - Credentials are injected via environment variables, never hardcoded or logged.
-- All data is transmitted over HTTPS to `api.alta-lex.ai`.
+- All data is transmitted over HTTPS to the Alta Lex API server (default: `api.alta-lex.ai`, overridable via `ALTA_LEX_BASE_URL` env).
 - No local state files are written; session state is managed server-side.
 - By using this skill, legal queries and documents are sent to the Alta Lex AI platform for processing.
 
