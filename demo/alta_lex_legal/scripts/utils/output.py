@@ -36,7 +36,7 @@ def json_output(
         result["progress"] = progress
     if extra is not None:
         result["extra"] = extra
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(result, ensure_ascii=False), flush=True)
 
 
 def error_exit(module: str, error_msg: str, session_id: str = ""):

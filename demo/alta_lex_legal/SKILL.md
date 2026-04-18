@@ -82,11 +82,12 @@ Send: "I'm processing your request using Alta Lex AI. This typically takes ~X mi
 openclaw cron create \
   --name "alta-lex-MODULE-SESSION_ID_SHORT" \
   --every INTERVAL \
-  --command "python3 {baseDir}/scripts/alta_lex.py -u \"$ALTA_LEX_USERNAME\" -p \"$ALTA_LEX_PASSWORD\" MODULE check --session-id \"SESSION_ID\" [--chat-id \"CHAT_ID\"] [--filename \"FILENAME\"]" \
+  --command "python3 {baseDir}/scripts/cron_poll.py -u \"$ALTA_LEX_USERNAME\" -p \"$ALTA_LEX_PASSWORD\" MODULE --session-id \"SESSION_ID\"" \
   --on-complete "reply" \
   --on-error "reply" \
   --auto-cleanup
 ```
+`cron_poll.py` provides built-in retry on transient network errors (default: 2 retries, 3s delay).
 
 ### Step 6: Auto-Delivery (via Cron)
 - `status: "running"` → wait for next poll
@@ -256,12 +257,40 @@ python3 {baseDir}/scripts/alta_lex.py -u "$ALTA_LEX_USERNAME" -p "$ALTA_LEX_PASS
 
 ## Fallback — Manual Polling
 
-If `openclaw cron` is unavailable, poll manually:
+If `openclaw cron` is unavailable, use `cron_poll.py` with `--loop` mode:
+```bash
+python3 {baseDir}/scripts/cron_poll.py -u "$ALTA_LEX_USERNAME" -p "$ALTA_LEX_PASSWORD" \
+  MODULE --session-id "$SID" --loop [--interval 30] [--max-attempts 20]
+```
+This polls at the specified interval until `status` is `complete` or `error`, or max attempts reached.
+
+Alternatively, poll manually with the main CLI:
 ```bash
 python3 {baseDir}/scripts/alta_lex.py -u "$ALTA_LEX_USERNAME" -p "$ALTA_LEX_PASSWORD" \
   MODULE check --session-id "$SID" [--chat-id "$CID"] [--filename "$FN"]
 ```
 Repeat at the interval specified in the Cron Intervals table until `status` is `complete` or `error`.
+
+## Cron Polling Script
+
+`scripts/cron_poll.py` is a standalone polling script for the 6 SSE modules (draft, compare, research, ipo, negotiation, translation).
+
+**Features:**
+- Built-in retry on transient network errors (connection reset, timeout, server error B00001)
+- Immediate failure on permanent errors (auth failure, credit insufficient A04006)
+- Two modes: single poll (for cron) and loop poll (manual fallback)
+- Standard JSON output compatible with OpenClaw cron parsing
+
+**Default poll intervals:**
+
+| Module | Interval |
+|---|---|
+| draft | 30s |
+| compare | 30s |
+| research | 2m |
+| ipo | 30s |
+| negotiation | 30s |
+| translation | 30s |
 
 ## Security & Privacy
 

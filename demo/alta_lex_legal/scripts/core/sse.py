@@ -122,5 +122,5 @@ def consume_sse_background(
         except Exception:
             pass
 
-    t = threading.Thread(target=_consume, daemon=True)
+    t = threading.Thread(target=_consume, daemon=False)
     t.start()
