@@ -6,7 +6,7 @@
 
 from typing import Optional
 from core.client import BaseClient
-from core.sse import consume_sse_background, read_sse_result
+from core.sse import consume_sse_background, read_sse_result, collect_sse_content
 
 
 class ContractDraftModule:
@@ -25,8 +25,14 @@ class ContractDraftModule:
         language: str = "Chinese",
         template_url: str = "",
         customer_request: str = "",
+        sync_sse: bool = False,
     ) -> dict:
-        """创建起草会话并触发 SSE 生成。"""
+        """创建起草会话并触发 SSE 生成。
+
+        Args:
+            sync_sse: True 时同步消费 SSE 流并直接返回内容 (用于 --wait 模式)。
+                      False 时在后台线程消费 (用于 cron 轮询模式)。
+        """
         payload = {
             "industry": industry,
             "position": position,
@@ -43,7 +49,27 @@ class ContractDraftModule:
         resp = self.client._post_with_retry("/createDraftSession", payload)
         session_id = resp.get("sessionId", "")
 
-        # 后台触发 SSE 流（捕获内容到本地文件）
+        if sync_sse:
+            sse_resp = self.client._sse_get(
+                "/commonGenerateSse", params={"sessionId": session_id}
+            )
+            content = collect_sse_content(sse_resp)
+            if content:
+                return {
+                    "status": "complete",
+                    "module": self.MODULE,
+                    "session_id": session_id,
+                    "content": content,
+                }
+            return {
+                "status": "error",
+                "module": self.MODULE,
+                "session_id": session_id,
+                "content": "",
+                "error": "SSE stream completed but no content received",
+            }
+
+        # 异步模式: 后台线程消费 SSE 流
         sse_url = f"{self.client.base_url}/commonGenerateSse"
         consume_sse_background(
             self.client.session, sse_url,

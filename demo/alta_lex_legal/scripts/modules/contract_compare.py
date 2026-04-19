@@ -5,7 +5,7 @@
 """
 
 from core.client import BaseClient
-from core.sse import consume_sse_background, read_sse_result
+from core.sse import consume_sse_background, collect_sse_content, read_sse_result
 
 
 class ContractCompareModule:
@@ -25,6 +25,7 @@ class ContractCompareModule:
         governing_law: str = "",
         title: str = "",
         customer_request: str = "",
+        sync_sse: bool = False,
     ) -> dict:
         """创建比对会话并触发 SSE 生成。"""
         payload = {
@@ -41,6 +42,27 @@ class ContractCompareModule:
 
         resp = self.client._post_with_retry("/createContractCompare", payload)
         session_id = resp.get("sessionId", "")
+
+        if sync_sse:
+            sse_resp = self.client._sse_get(
+                "/commonGenerateSse/contractCompare",
+                params={"sessionId": session_id},
+            )
+            content = collect_sse_content(sse_resp)
+            if content:
+                return {
+                    "status": "complete",
+                    "module": self.MODULE,
+                    "session_id": session_id,
+                    "content": content,
+                }
+            return {
+                "status": "error",
+                "module": self.MODULE,
+                "session_id": session_id,
+                "content": "",
+                "error": "SSE stream completed but no content received",
+            }
 
         sse_url = f"{self.client.base_url}/commonGenerateSse/contractCompare"
         consume_sse_background(

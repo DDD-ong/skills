@@ -265,7 +265,7 @@ class BaseClient:
             是否成功注销。
         """
         site_url = self.base_url.rsplit("/api", 1)[0]
-        logout_url = f"{site_url}/altalex/api/v1/web/public/auth/logout"
+        logout_url = f"{site_url}/altalex/api/v1/web/public/auth/login/private/logout"
         sid = session_id or self.session.headers.get("Authorization")
         headers = dict(self.session.headers)
         if sid:

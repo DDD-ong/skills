@@ -6,7 +6,7 @@
 
 from typing import Optional
 from core.client import BaseClient
-from core.sse import consume_sse_background, read_sse_result
+from core.sse import consume_sse_background, collect_sse_content, read_sse_result
 
 
 class LegalResearchModule:
@@ -20,6 +20,7 @@ class LegalResearchModule:
         query: str,
         research_type: str = "search",
         file_urls: Optional[list] = None,
+        sync_sse: bool = False,
     ) -> dict:
         """创建法律研究会话并触发 SSE 分析。"""
         create_payload = {
@@ -32,12 +33,32 @@ class LegalResearchModule:
         resp = self.client._post_with_retry("/createAnalysisSession", create_payload)
         session_id = resp.get("sessionId", "")
 
-        # Legal Research 使用 POST SSE
-        sse_url = f"{self.client.base_url}/legalAnalysisSse"
         sse_payload = {
             "sessionId": session_id,
             "researchType": research_type,
         }
+
+        if sync_sse:
+            sse_resp = self.client._sse_post(
+                "/legalAnalysisSse", json_data=sse_payload
+            )
+            content = collect_sse_content(sse_resp)
+            if content:
+                return {
+                    "status": "complete",
+                    "module": self.MODULE,
+                    "session_id": session_id,
+                    "content": content,
+                }
+            return {
+                "status": "error",
+                "module": self.MODULE,
+                "session_id": session_id,
+                "content": "",
+                "error": "SSE stream completed but no content received",
+            }
+
+        sse_url = f"{self.client.base_url}/legalAnalysisSse"
         consume_sse_background(
             self.client.session, sse_url,
             method="POST", json_data=sse_payload,
@@ -84,6 +105,7 @@ class LegalResearchModule:
         chat_id: str = "",
         research_type: str = "search",
         file_urls: Optional[list] = None,
+        sync_sse: bool = False,
     ) -> dict:
         """多轮追问 (Search 模式最多 10 轮)。"""
         sse_payload = {
@@ -95,6 +117,26 @@ class LegalResearchModule:
             sse_payload["chatId"] = chat_id
         if file_urls:
             sse_payload["fileUrls"] = file_urls
+
+        if sync_sse:
+            sse_resp = self.client._sse_post(
+                "/legalAnalysisSse", json_data=sse_payload
+            )
+            content = collect_sse_content(sse_resp)
+            if content:
+                return {
+                    "status": "complete",
+                    "module": self.MODULE,
+                    "session_id": session_id,
+                    "content": content,
+                }
+            return {
+                "status": "error",
+                "module": self.MODULE,
+                "session_id": session_id,
+                "content": "",
+                "error": "SSE stream completed but no content received",
+            }
 
         sse_url = f"{self.client.base_url}/legalAnalysisSse"
         consume_sse_background(

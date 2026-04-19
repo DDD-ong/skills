@@ -21,6 +21,7 @@ class TranslationModule:
         target_language: str = "Chinese",
         contract_type: str = "",
         governing_law: str = "",
+        sync_sse: bool = False,
     ) -> dict:
         """创建翻译会话并触发 SSE 翻译。"""
         payload = {
@@ -36,7 +37,26 @@ class TranslationModule:
         resp = self.client._post_with_retry("/createTranslateSession", payload)
         session_id = resp.get("sessionId", "")
 
-        # 触发 SSE 翻译（捕获内容到本地文件）
+        if sync_sse:
+            sse_resp = self.client._sse_post(
+                "/textTranslate", json_data={"sessionId": session_id}
+            )
+            content = collect_sse_content(sse_resp)
+            if content:
+                return {
+                    "status": "complete",
+                    "module": self.MODULE,
+                    "session_id": session_id,
+                    "content": content,
+                }
+            return {
+                "status": "error",
+                "module": self.MODULE,
+                "session_id": session_id,
+                "content": "",
+                "error": "SSE stream completed but no content received",
+            }
+
         sse_url = f"{self.client.base_url}/textTranslate"
         consume_sse_background(
             self.client.session, sse_url,

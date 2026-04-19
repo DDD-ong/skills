@@ -75,6 +75,7 @@ def handle_draft(args, client):
             language=args.language or "Chinese",
             template_url=args.template_url or "",
             customer_request=args.request or "",
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
@@ -119,6 +120,7 @@ def handle_compare(args, client):
             governing_law=args.governing_law or "",
             title=args.title or "",
             customer_request=args.request or "",
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
@@ -136,6 +138,7 @@ def handle_research(args, client):
             query=args.query,
             research_type=args.research_type or "search",
             file_urls=file_urls,
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
@@ -148,6 +151,7 @@ def handle_research(args, client):
             query=args.query,
             research_type=args.research_type or "search",
             file_urls=file_urls,
+            sync_sse=getattr(args, "wait", False),
         )
         return result
 
@@ -167,6 +171,7 @@ def handle_ipo(args, client):
             circular_requirements=args.circular_requirements,
             other_relevant_facts=args.other_facts or "",
             file_url=args.file_url or "",
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
@@ -188,6 +193,7 @@ def handle_negotiation(args, client):
             title=args.title or "",
             customer_request=args.request or "",
             file_url=args.file_url or "",
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
@@ -206,6 +212,7 @@ def handle_translation(args, client):
             target_language=args.target_lang or "Chinese",
             contract_type=args.contract_type or "",
             governing_law=args.governing_law or "",
+            sync_sse=getattr(args, "wait", False),
         )
         return result
     elif args.action == "check":
