@@ -1,22 +1,25 @@
 ---
 name: alta_lex_legal
-version: 2.2.0
-description: "Full-featured legal AI assistant via Alta Lex platform (法律AI助手). Covers 11 modules: contract drafting (合同起草), contract review (合同审查), contract comparison (合同比对), legal research (法律研究/法规查询), IPO support (IPO合规审查), negotiation playbook (谈判策略), document translation (文件翻译), due diligence (尽职调查), legal compliance (合规审查), desensitization (数据脱敏), and tabular analysis (表格分析). Use when: (1) user wants to draft, review, compare, or translate contracts or legal documents (起草、审查、比对、翻译合同或法律文件); (2) user asks ANY legal question, seeks legal advice, wants legal research, regulation lookup, or case analysis (任何法律咨询、法律问题、法规查询、案例分析); (3) user needs IPO compliance checks, negotiation strategies, due diligence, compliance review, data desensitization, or document data extraction; (4) user mentions keywords like: law, legal, attorney, lawyer, statute, regulation, contract, agreement, clause, liability, litigation, arbitration, 法律, 法规, 合同, 协议, 条款, 责任, 诉讼, 仲裁, 律师, 合规, 知识产权, 劳动法, 公司法, 侵权, 赔偿, 法院, 判决. NOT for: non-legal questions, simple factual lookups unrelated to law."
+version: 2.4.0
+description: "Full-featured legal AI assistant via Alta Lex platform (法律AI助手). Covers 11 modules: contract drafting (合同起草), contract review (合同审查), contract comparison (合同比对), legal research (法律研究/法规查询), IPO support (IPO合规审查), negotiation playbook (谈判策略), document translation (文件翻译), due diligence (尽职调查), legal compliance (合规审查), desensitization (数据脱敏), and tabular analysis (表格分析). Use when: (1) user wants to draft, review, compare, or translate contracts or legal documents (起草、审查、比对、翻译合同或法律文件); (2) user asks ANY legal question, seeks legal advice, wants legal research, regulation lookup, or case analysis (任何法律咨询、法律问题、法规查询、案例分析); (3) user wants to draft or prepare legal documents like petitions, legal opinions, memos, letters, agreements (起草起诉状、答辩状、法律意见书、备忘录、律师函、协议书); (4) user needs IPO compliance checks, negotiation strategies, due diligence, compliance review, data desensitization, or document data extraction; (5) user mentions keywords like: law, legal, attorney, lawyer, statute, regulation, contract, agreement, clause, liability, litigation, arbitration, court, judgment, verdict, appeal, plaintiff, defendant, counsel, jurisdiction, tort, damages, injunction, indemnity, warranty, intellectual property, employment law, corporate law, criminal law, family law, tax law, environmental law, maritime law, international law, constitutional law, administrative law, bankruptcy, merger, acquisition, antitrust, data privacy, GDPR, PIPL, NDA, SPA, MOU, JV, 法律, 法规, 合同, 协议, 条款, 责任, 诉讼, 仲裁, 律师, 合规, 知识产权, 劳动法, 公司法, 侵权, 赔偿, 法院, 判决, 起诉, 辩护, 立法, 司法, 行政法, 刑法, 民法, 婚姻法, 继承法, 税法, 环境法, 国际法, 商法, 证券法, 保险法, 担保, 抵押, 质押, 股权, 债权, 尽职调查, 法律意见, 法律咨询, 法律文书, 律师函, 起诉状, 答辩状, 代理词, 调解, 和解, 执行, 强制执行, 保全, 管辖, 上诉, 再审, 终审. NOT for: non-legal questions, simple factual lookups unrelated to law."
 metadata: { "openclaw": { "emoji": "⚖️", "requires": { "bins": ["python3"], "env": ["ALTA_LEX_USERNAME", "ALTA_LEX_PASSWORD"] }, "os": ["darwin", "linux"] } }
 ---
 
 # Alta Lex Legal AI — Unified Skill (11 Modules)
 
-Full legal AI assistant covering contract management, legal research, compliance, and document processing. Uses `--wait` flag for automatic background polling — **one command does start + poll**.
+Full legal AI assistant covering contract management, legal research, compliance, and document processing. Uses `--wait` flag for synchronous SSE — **one command does start + wait + return result**.
 
 ## Architecture
 
 ```
 User (Discord/Web) → OpenClaw Agent
   → python3 alta_lex.py --wait ... MODULE start [params]  (background:true)
-  → JSON stream: {"status":"started"} → {"status":"running"} → {"status":"complete", "content":"..."}
+  → Synchronous SSE: blocks until complete, returns final JSON
+  → {"status":"complete", "content":"...", "session_id":"..."}
   → deliver content to user
 ```
+
+`--wait` mode uses synchronous SSE consumption — the command blocks until the SSE stream finishes, then returns a single JSON with the complete result. No polling needed.
 
 ## Credentials
 
@@ -30,13 +33,16 @@ Environment variables injected via `~/.openclaw/openclaw.json`:
         "enabled": true,
         "env": {
           "ALTA_LEX_USERNAME": "<username>",
-          "ALTA_LEX_PASSWORD": "<password>"
+          "ALTA_LEX_PASSWORD": "<password>",
+          "ALTA_LEX_SESSION_ID": "<optional: direct token, bypasses login>"
         }
       }
     }
   }
 }
 ```
+
+Authentication priority: `ALTA_LEX_SESSION_ID` (if set) > `ALTA_LEX_USERNAME` + `ALTA_LEX_PASSWORD`.
 
 ## Intent Detection
 

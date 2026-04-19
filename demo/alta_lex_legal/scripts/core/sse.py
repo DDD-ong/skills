@@ -7,6 +7,7 @@ SSE (Server-Sent Events) 流解析器
 import json
 import os
 import threading
+import time
 from typing import Generator, Optional
 
 import requests
@@ -83,12 +84,22 @@ def parse_sse_stream(resp: requests.Response) -> Generator[SSEEvent, None, None]
                     yield SSEEvent(message=payload, is_finished=False, raw={})
 
 
-def collect_sse_content(resp: requests.Response) -> str:
-    """消费 SSE 流并返回拼接后的完整内容。"""
+def collect_sse_content(resp: requests.Response, timeout: int = 300) -> str:
+    """
+    消费 SSE 流并返回拼接后的完整内容。
+
+    Args:
+        resp: SSE 响应对象 (stream=True)
+        timeout: 最大等待秒数 (默认 300 秒 / 5 分钟)。
+                 超时后返回已收集到的内容（可能为空）。
+    """
     parts = []
+    start_time = time.monotonic()
     for event in parse_sse_stream(resp):
         parts.append(event.message)
         if event.is_finished:
+            break
+        if time.monotonic() - start_time > timeout:
             break
     return "".join(parts)
 
