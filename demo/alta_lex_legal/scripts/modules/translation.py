@@ -5,7 +5,7 @@
 """
 
 from core.client import BaseClient
-from core.sse import consume_sse_background, collect_sse_content
+from core.sse import consume_sse_background, collect_sse_content, read_sse_result
 
 
 class TranslationModule:
@@ -36,11 +36,12 @@ class TranslationModule:
         resp = self.client._post_with_retry("/createTranslateSession", payload)
         session_id = resp.get("sessionId", "")
 
-        # 触发 SSE 翻译
+        # 触发 SSE 翻译（捕获内容到本地文件）
         sse_url = f"{self.client.base_url}/textTranslate"
         consume_sse_background(
             self.client.session, sse_url,
             method="POST", json_data={"sessionId": session_id},
+            session_id=session_id,
         )
 
         return {
@@ -50,7 +51,16 @@ class TranslationModule:
         }
 
     def check(self, session_id: str) -> dict:
-        """轮询翻译结果。"""
+        """轮询翻译结果：优先读本地 SSE 结果，回退到服务端 API。"""
+        local = read_sse_result(session_id)
+        if local and local.get("status") == "complete" and local.get("content"):
+            return {"status": "complete", "module": self.MODULE,
+                    "session_id": session_id, "content": local["content"]}
+        if local and local.get("status") == "error" and local.get("error"):
+            return {"status": "error", "module": self.MODULE,
+                    "session_id": session_id, "content": "",
+                    "error": local["error"]}
+
         resp = self.client._get_with_retry(
             "/getTranslateSessionHistory",
             params={"sessionId": session_id},

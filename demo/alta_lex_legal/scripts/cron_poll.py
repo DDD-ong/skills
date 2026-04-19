@@ -59,7 +59,7 @@ MODULE_REGISTRY = {
 DEFAULT_INTERVALS = {
     "draft": 30,
     "compare": 30,
-    "research": 120,
+    "research": 30,
     "ipo": 30,
     "negotiation": 30,
     "translation": 30,

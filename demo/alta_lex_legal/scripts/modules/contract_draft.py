@@ -6,7 +6,7 @@
 
 from typing import Optional
 from core.client import BaseClient
-from core.sse import consume_sse_background
+from core.sse import consume_sse_background, read_sse_result
 
 
 class ContractDraftModule:
@@ -43,11 +43,12 @@ class ContractDraftModule:
         resp = self.client._post_with_retry("/createDraftSession", payload)
         session_id = resp.get("sessionId", "")
 
-        # 后台触发 SSE 流
+        # 后台触发 SSE 流（捕获内容到本地文件）
         sse_url = f"{self.client.base_url}/commonGenerateSse"
         consume_sse_background(
             self.client.session, sse_url,
             method="GET", params={"sessionId": session_id},
+            session_id=session_id,
         )
 
         return {
@@ -57,7 +58,18 @@ class ContractDraftModule:
         }
 
     def check(self, session_id: str) -> dict:
-        """轮询起草结果。"""
+        """轮询起草结果：优先读本地 SSE 结果，回退到服务端 API。"""
+        # 1. 先检查本地 SSE 结果文件
+        local = read_sse_result(session_id)
+        if local and local.get("status") == "complete" and local.get("content"):
+            return {"status": "complete", "module": self.MODULE,
+                    "session_id": session_id, "content": local["content"]}
+        if local and local.get("status") == "error" and local.get("error"):
+            return {"status": "error", "module": self.MODULE,
+                    "session_id": session_id, "content": "",
+                    "error": local["error"]}
+
+        # 2. 回退到服务端 API
         resp = self.client._get_with_retry(
             "/getDraftSessionHistory", params={"sessionId": session_id}
         )

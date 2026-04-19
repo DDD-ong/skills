@@ -1,6 +1,6 @@
 {
   "name": "alta-lex-legal",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "OpenClaw skill for full Legal AI Assistant (11 modules) via Alta Lex platform",
   "bin": {
     "alta-lex-legal": "./bin/install.mjs"

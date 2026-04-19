@@ -5,10 +5,16 @@ SSE (Server-Sent Events) 流解析器
 """
 
 import json
+import os
 import threading
 from typing import Generator, Optional
 
 import requests
+
+# SSE 结果文件目录
+SSE_RESULTS_DIR = os.path.join(
+    os.path.expanduser("~"), ".openclaw", "skills", "alta_lex_legal", ".sse_results"
+)
 
 
 class SSEEvent:
@@ -87,15 +93,49 @@ def collect_sse_content(resp: requests.Response) -> str:
     return "".join(parts)
 
 
+def _sse_result_path(session_id: str) -> str:
+    """返回 SSE 结果文件路径。"""
+    return os.path.join(SSE_RESULTS_DIR, f"{session_id}.json")
+
+
+def write_sse_result(session_id: str, status: str, content: str = "",
+                     error: str = ""):
+    """写入 SSE 结果到本地文件。"""
+    os.makedirs(SSE_RESULTS_DIR, exist_ok=True)
+    data = {"status": status, "content": content, "error": error}
+    path = _sse_result_path(session_id)
+    with open(path, "w") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def read_sse_result(session_id: str) -> Optional[dict]:
+    """
+    读取本地 SSE 结果文件。
+
+    Returns:
+        {"status": "running|complete|error", "content": "...", "error": "..."}
+        或 None (文件不存在)
+    """
+    path = _sse_result_path(session_id)
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, "r") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 def consume_sse_background(
     session: requests.Session,
     url: str,
     method: str = "GET",
     json_data: Optional[dict] = None,
     params: Optional[dict] = None,
+    session_id: str = "",
 ):
     """
-    在后台线程中消费 SSE 流，保持连接以确保服务端持续生成。
+    在后台线程中消费 SSE 流，捕获内容并写入本地结果文件。
 
     Args:
         session: requests.Session 实例 (已含认证信息)
@@ -103,8 +143,13 @@ def consume_sse_background(
         method: HTTP 方法 (GET 或 POST)
         json_data: POST 请求体
         params: GET 查询参数
+        session_id: 会话 ID，用于标识结果文件
     """
+    if session_id:
+        write_sse_result(session_id, "running")
+
     def _consume():
+        parts = []
         try:
             if method.upper() == "POST":
                 resp = session.post(
@@ -117,10 +162,23 @@ def consume_sse_background(
                     headers={**session.headers, "Accept": "text/event-stream"},
                 )
             resp.raise_for_status()
-            for _ in resp.iter_content(chunk_size=4096):
-                pass
-        except Exception:
-            pass
+            for event in parse_sse_stream(resp):
+                parts.append(event.message)
+                if event.is_finished:
+                    break
+            content = "".join(parts)
+            if session_id:
+                if content:
+                    write_sse_result(session_id, "complete", content)
+                else:
+                    write_sse_result(session_id, "running")
+        except Exception as e:
+            if session_id:
+                content = "".join(parts)
+                if content:
+                    write_sse_result(session_id, "complete", content)
+                else:
+                    write_sse_result(session_id, "error", error=str(e))
 
     t = threading.Thread(target=_consume, daemon=False)
     t.start()
