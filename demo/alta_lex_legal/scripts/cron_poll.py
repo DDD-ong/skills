@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-Alta Lex Legal AI — Cron Polling Script
-========================================
-独立轮询脚本，供 OpenClaw cron 或 OS crontab 调用，检查异步任务状态。
+Alta Lex Legal AI — Background Polling Script
+===============================================
+独立轮询脚本，检查异步任务状态。
 
 支持两种模式:
-  1. 单次轮询 (cron 模式): 检查一次，输出 JSON，退出
-  2. 循环轮询 (手动 fallback): 按间隔重复检查，直到完成或超时
+  1. 单次轮询 (one-shot): 检查一次，输出 JSON，退出
+  2. 循环轮询 (background 模式): 按间隔重复检查，直到完成或超时
 
-覆盖 6 个 SSE 模块: draft, compare, research, ipo, negotiation, translation
+覆盖全部 11 个模块: draft, compare, research, ipo, negotiation, translation,
+                    review, duediligence, compliance, desensitize, tabular
 
 用法:
     # 单次轮询
     python3 cron_poll.py -u USER -p PASS research --session-id SID
 
-    # 循环轮询
+    # 循环轮询 (推荐以 background:true 运行)
     python3 cron_poll.py -u USER -p PASS research --session-id SID \\
-        --loop --interval 30 --max-attempts 20
+        --loop --interval 30 --max-attempts 30
 """
 
 import argparse
@@ -42,12 +43,17 @@ from utils.output import error_exit, json_output
 # ── 常量 ─────────────────────────────────────────────────
 
 MODULE_REGISTRY = {
-    "draft":       ("modules.contract_draft",   "ContractDraftModule"),
-    "compare":     ("modules.contract_compare",  "ContractCompareModule"),
-    "research":    ("modules.legal_research",    "LegalResearchModule"),
-    "ipo":         ("modules.ipo_support",       "IPOSupportModule"),
-    "negotiation": ("modules.negotiation",       "NegotiationModule"),
-    "translation": ("modules.translation",       "TranslationModule"),
+    "draft":         ("modules.contract_draft",    "ContractDraftModule"),
+    "compare":       ("modules.contract_compare",  "ContractCompareModule"),
+    "research":      ("modules.legal_research",    "LegalResearchModule"),
+    "ipo":           ("modules.ipo_support",        "IPOSupportModule"),
+    "negotiation":   ("modules.negotiation",        "NegotiationModule"),
+    "translation":   ("modules.translation",        "TranslationModule"),
+    "review":        ("modules.contract_review",    "ContractReviewModule"),
+    "duediligence":  ("modules.due_diligence",      "DueDiligenceModule"),
+    "compliance":    ("modules.compliance",          "ComplianceModule"),
+    "desensitize":   ("modules.desensitization",     "DesensitizationModule"),
+    "tabular":       ("modules.tabular",             "TabularModule"),
 }
 
 DEFAULT_INTERVALS = {
@@ -57,6 +63,11 @@ DEFAULT_INTERVALS = {
     "ipo": 30,
     "negotiation": 30,
     "translation": 30,
+    "review": 30,
+    "duediligence": 60,
+    "compliance": 90,
+    "desensitize": 20,
+    "tabular": 60,
 }
 
 
@@ -175,13 +186,26 @@ def _create_client(args) -> BaseClient:
     return client  # unreachable
 
 
+# ── check 参数分发 ─────────────────────────────────────────
+
+def _build_check_kwargs(module_name: str, session_id: str,
+                        chat_id: str, filename: str) -> dict:
+    """根据模块类型构建 check() 调用参数。"""
+    if module_name == "review":
+        return {"filename": filename}
+    elif module_name in ("compliance", "duediligence", "tabular"):
+        return {"session_id": session_id, "chat_id": chat_id}
+    else:
+        return {"session_id": session_id}
+
+
 # ── 单次轮询 ──────────────────────────────────────────────
 
-def single_poll(module, module_name: str, session_id: str,
+def single_poll(module, module_name: str, check_kwargs: dict,
                 max_retries: int, delay: float) -> dict:
     """执行单次轮询并返回结果。"""
     result = retry_poll(
-        lambda: module.check(session_id),
+        lambda: module.check(**check_kwargs),
         max_retries=max_retries,
         delay=delay,
     )
@@ -190,27 +214,28 @@ def single_poll(module, module_name: str, session_id: str,
 
 # ── 循环轮询 ──────────────────────────────────────────────
 
-def loop_poll(module, module_name: str, session_id: str,
+def loop_poll(module, module_name: str, check_kwargs: dict,
               interval: int, max_attempts: int,
               max_retries: int, delay: float):
     """循环轮询直到完成、出错或超时。"""
+    sid = check_kwargs.get("session_id", check_kwargs.get("filename", ""))
     for attempt in range(1, max_attempts + 1):
         try:
             result = retry_poll(
-                lambda: module.check(session_id),
+                lambda: module.check(**check_kwargs),
                 max_retries=max_retries,
                 delay=delay,
             )
         except AltaLexError as e:
             json_output(
                 status="error", module=module_name,
-                session_id=session_id, error=str(e),
+                session_id=sid, error=str(e),
             )
             sys.exit(1)
         except Exception as e:
             json_output(
                 status="error", module=module_name,
-                session_id=session_id, error=f"Unexpected error: {e}",
+                session_id=sid, error=f"Unexpected error: {e}",
             )
             sys.exit(1)
 
@@ -218,7 +243,7 @@ def loop_poll(module, module_name: str, session_id: str,
 
         json_output(
             status=status, module=module_name,
-            session_id=session_id,
+            session_id=sid,
             content=result.get("content", ""),
             error=result.get("error", ""),
             progress=result.get("progress"),
@@ -237,7 +262,7 @@ def loop_poll(module, module_name: str, session_id: str,
     total_time = interval * max_attempts
     json_output(
         status="error", module=module_name,
-        session_id=session_id,
+        session_id=sid,
         error=f"Polling timeout: {max_attempts} attempts over ~{total_time}s",
     )
     sys.exit(1)
@@ -272,23 +297,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Module to poll",
     )
     parser.add_argument(
-        "--session-id", required=True,
-        help="Task session ID to poll",
+        "--session-id",
+        help="Task session ID to poll (required for most modules)",
+    )
+    parser.add_argument(
+        "--chat-id",
+        help="Chat ID (required for compliance/duediligence/tabular)",
+    )
+    parser.add_argument(
+        "--filename",
+        help="Filename to poll (required for review module)",
     )
 
     # 循环模式
     loop_group = parser.add_argument_group("loop mode")
     loop_group.add_argument(
         "--loop", action="store_true",
-        help="Enable loop polling mode (manual fallback)",
+        help="Enable loop polling mode (background:true)",
     )
     loop_group.add_argument(
         "--interval", type=int, default=None,
         help="Poll interval in seconds (default: per-module)",
     )
     loop_group.add_argument(
-        "--max-attempts", type=int, default=20,
-        help="Max poll attempts in loop mode (default: 20)",
+        "--max-attempts", type=int, default=30,
+        help="Max poll attempts in loop mode (default: 30)",
     )
 
     # 重试配置
@@ -312,7 +345,24 @@ def main():
     args = parser.parse_args()
 
     module_name = args.module
-    session_id = args.session_id
+
+    # ── 输入验证 ──
+    if module_name == "review":
+        if not args.filename:
+            parser.error("review module requires --filename")
+    elif module_name in ("compliance", "duediligence", "tabular"):
+        if not args.session_id:
+            parser.error(f"{module_name} module requires --session-id")
+        if not args.chat_id:
+            parser.error(f"{module_name} module requires --chat-id")
+    else:
+        if not args.session_id:
+            parser.error(f"{module_name} module requires --session-id")
+
+    check_kwargs = _build_check_kwargs(
+        module_name, args.session_id or "",
+        args.chat_id or "", args.filename or "",
+    )
 
     try:
         client = _create_client(args)
@@ -321,7 +371,7 @@ def main():
         if args.loop:
             interval = args.interval or DEFAULT_INTERVALS.get(module_name, 30)
             loop_poll(
-                module, module_name, session_id,
+                module, module_name, check_kwargs,
                 interval=interval,
                 max_attempts=args.max_attempts,
                 max_retries=args.retries,
@@ -329,14 +379,15 @@ def main():
             )
         else:
             result = single_poll(
-                module, module_name, session_id,
+                module, module_name, check_kwargs,
                 max_retries=args.retries,
                 delay=args.retry_delay,
             )
+            sid = check_kwargs.get("session_id", check_kwargs.get("filename", ""))
             status = result.get("status", "running")
             json_output(
                 status=status, module=module_name,
-                session_id=session_id,
+                session_id=sid,
                 content=result.get("content", ""),
                 error=result.get("error", ""),
                 progress=result.get("progress"),

@@ -76,10 +76,10 @@ def handle_draft(args, client):
             template_url=args.template_url or "",
             customer_request=args.request or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_review(args, client):
@@ -98,10 +98,10 @@ def handle_review(args, client):
             language=args.language or "",
             customer_request=args.request or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(filename=args.filename)
-        json_output(**result)
+        return result
 
 
 def handle_compare(args, client):
@@ -120,10 +120,10 @@ def handle_compare(args, client):
             title=args.title or "",
             customer_request=args.request or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_research(args, client):
@@ -137,10 +137,10 @@ def handle_research(args, client):
             research_type=args.research_type or "search",
             file_urls=file_urls,
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
     elif args.action == "followup":
         file_urls = args.file_urls.split(",") if args.file_urls else None
         result = mod.followup(
@@ -149,7 +149,7 @@ def handle_research(args, client):
             research_type=args.research_type or "search",
             file_urls=file_urls,
         )
-        json_output(**result)
+        return result
 
 
 def handle_ipo(args, client):
@@ -168,10 +168,10 @@ def handle_ipo(args, client):
             other_relevant_facts=args.other_facts or "",
             file_url=args.file_url or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_negotiation(args, client):
@@ -189,10 +189,10 @@ def handle_negotiation(args, client):
             customer_request=args.request or "",
             file_url=args.file_url or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_translation(args, client):
@@ -207,10 +207,10 @@ def handle_translation(args, client):
             contract_type=args.contract_type or "",
             governing_law=args.governing_law or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
     elif args.action == "quick":
         result = mod.quick_translate(
             query=args.query,
@@ -219,7 +219,7 @@ def handle_translation(args, client):
             contract_type=args.contract_type or "",
             governing_law=args.governing_law or "",
         )
-        json_output(**result)
+        return result
 
 
 def handle_duediligence(args, client):
@@ -235,7 +235,7 @@ def handle_duediligence(args, client):
             language=args.language or "Chinese",
             customer_request=args.request or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "start":
         file_urls = args.file_urls.split(",") if args.file_urls else None
         result = mod.start(
@@ -244,13 +244,13 @@ def handle_duediligence(args, client):
             session_id=args.sid or "",
             checklist=args.checklist or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(
             session_id=args.sid,
             chat_id=args.chat_id or "",
         )
-        json_output(**result)
+        return result
 
 
 def handle_compliance(args, client):
@@ -274,16 +274,16 @@ def handle_compliance(args, client):
             data_scope=args.data_scope or "",
             business_regions=business_regions,
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(
             session_id=args.sid,
             chat_id=args.chat_id,
         )
-        json_output(**result)
+        return result
     elif args.action == "export":
         result = mod.export_excel(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_desensitize(args, client):
@@ -297,10 +297,10 @@ def handle_desensitize(args, client):
             title=args.title or "",
             entity_types=entity_types,
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(session_id=args.sid)
-        json_output(**result)
+        return result
 
 
 def handle_tabular(args, client):
@@ -316,7 +316,7 @@ def handle_tabular(args, client):
             language=args.language or "Chinese",
             customer_request=args.request or "",
         )
-        json_output(**result)
+        return result
     elif args.action == "start":
         file_urls = args.file_urls.split(",") if args.file_urls else []
         checklist = None
@@ -336,13 +336,13 @@ def handle_tabular(args, client):
             customer_request=args.request or "",
             checklist=checklist,
         )
-        json_output(**result)
+        return result
     elif args.action == "check":
         result = mod.check(
             session_id=args.sid,
             chat_id=args.chat_id,
         )
-        json_output(**result)
+        return result
 
 
 # ── argparse 构建 ─────────────────────────────────────
@@ -358,6 +358,21 @@ def build_parser():
     parser.add_argument("-p", "--password", default=None)
     parser.add_argument("--session-id", default=None, dest="session_id")
     parser.add_argument("--base-url", default=None)
+
+    # --wait 模式 (start + 自动轮询)
+    wait_group = parser.add_argument_group("wait mode")
+    wait_group.add_argument(
+        "--wait", action="store_true",
+        help="After start, automatically poll until complete/error/timeout",
+    )
+    wait_group.add_argument(
+        "--wait-interval", type=int, default=None,
+        help="Poll interval in seconds (default: per-module)",
+    )
+    wait_group.add_argument(
+        "--wait-max-attempts", type=int, default=30,
+        help="Max poll attempts in wait mode (default: 30)",
+    )
 
     subparsers = parser.add_subparsers(dest="module", help="功能模块")
 
@@ -604,7 +619,53 @@ def main():
 
     try:
         client = create_client(args)
-        handler(args, client)
+        result = handler(args, client)
+
+        # 集中输出
+        if result:
+            json_output(**result)
+
+        # --wait: start 后自动轮询直到完成
+        if (
+            getattr(args, "wait", False)
+            and getattr(args, "action", "") == "start"
+            and result
+            and result.get("status") == "started"
+        ):
+            from cron_poll import (
+                DEFAULT_INTERVALS,
+                MODULE_REGISTRY,
+                _build_check_kwargs,
+                loop_poll,
+            )
+
+            module_name = args.module
+            session_id = result.get("session_id", "")
+            chat_id = result.get("chat_id", "")
+            extra = result.get("extra") or {}
+            filename = extra.get("filename", "")
+
+            # 加载模块实例 (复用已认证 client)
+            mod_path, cls_name = MODULE_REGISTRY[module_name]
+            mod = importlib.import_module(mod_path)
+            poll_module = getattr(mod, cls_name)(client)
+
+            check_kwargs = _build_check_kwargs(
+                module_name, session_id, chat_id, filename
+            )
+            interval = (
+                args.wait_interval
+                or DEFAULT_INTERVALS.get(module_name, 30)
+            )
+
+            loop_poll(
+                poll_module, module_name, check_kwargs,
+                interval=interval,
+                max_attempts=args.wait_max_attempts,
+                max_retries=2,
+                delay=3.0,
+            )
+
     except AltaLexError as e:
         error_exit(args.module or "unknown", str(e))
     except Exception as e:

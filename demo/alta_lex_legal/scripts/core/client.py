@@ -116,10 +116,10 @@ class BaseClient:
         智能认证: 优先复用缓存 Session，仅在失效时才调 login。
 
         流程:
-        1. 读取本地缓存的 Session ID (带 TTL 检查)
-        2. 用缓存 Session 调 getUserInfo 验证有效性
-        3. 有效 → 直接复用，不调 login
-        4. 无效/过期/不存在 → 调 login 获取新 Session 并缓存
+        1. 读取本地缓存的 Session ID (带 TTL 检查) → 验证有效性
+        2. 若 TTL 过期，尝试无 TTL 的 raw 缓存 (处理 25-30 分钟窗口期)
+        3. 缓存均失效 → 调 login 获取新 Session 并缓存
+        4. 若 login 报 "already logged in" → 自动 logout 旧 Session 再重试
 
         Returns:
             用户信息 dict。
@@ -127,16 +127,31 @@ class BaseClient:
         self._username = username
         self._password = password
 
-        # 1. 尝试从缓存恢复 Session
+        # 1. 尝试从缓存恢复 Session (带 TTL 检查)
         cached_sid = self._load_session_cache()
         if cached_sid:
             self.set_auth(cached_sid)
-            # 2. 验证缓存 Session 是否仍有效
             if self._verify_session():
                 return {"status": "cached_session"}
 
-        # 3. 缓存失效或不存在，执行 login
-        return self.login(username, password)
+        # 2. TTL 过期但服务端可能仍有效 (25-30 分钟窗口)
+        raw_sid = self._load_session_cache_raw()
+        if raw_sid and raw_sid != cached_sid:
+            self.set_auth(raw_sid)
+            if self._verify_session():
+                self._save_session_cache(raw_sid)  # 刷新本地 TTL
+                return {"status": "cached_session"}
+
+        # 3. 缓存均失效，执行 login
+        try:
+            return self.login(username, password)
+        except (APIError, AuthenticationError) as e:
+            err_msg = str(e).lower()
+            if "already logged" in err_msg or "logout" in err_msg:
+                # 4. "already logged in" → 强制 logout 旧 Session 后重试
+                self.logout(raw_sid)
+                return self.login(username, password)
+            raise
 
     def _verify_session(self) -> bool:
         """通过轻量 API 调用验证当前 Session 是否有效。"""
@@ -157,6 +172,17 @@ class BaseClient:
             self._clear_session_cache()
             self.login(self._username, self._password)
             return True
+        except (APIError, AuthenticationError) as e:
+            err_msg = str(e).lower()
+            if "already logged" in err_msg or "logout" in err_msg:
+                raw_sid = self._load_session_cache_raw()
+                self.logout(raw_sid)
+                try:
+                    self.login(self._username, self._password)
+                    return True
+                except AltaLexError:
+                    return False
+            return False
         except AltaLexError:
             return False
 
@@ -202,6 +228,22 @@ class BaseClient:
         except (OSError, ValueError, KeyError):
             return None
 
+    def _load_session_cache_raw(self) -> Optional[str]:
+        """
+        读取缓存的 Session ID，不做 TTL 检查。
+        用于 logout / "already logged in" 恢复场景。
+        """
+        try:
+            if not os.path.exists(self.SESSION_CACHE_FILE):
+                return None
+            with open(self.SESSION_CACHE_FILE, "r") as f:
+                cache_data = _json.load(f)
+            if cache_data.get("base_url") != self.base_url:
+                return None
+            return cache_data.get("session_id")
+        except (OSError, ValueError, KeyError):
+            return None
+
     def _clear_session_cache(self):
         """清除本地 Session 缓存。"""
         try:
@@ -209,6 +251,32 @@ class BaseClient:
                 os.remove(self.SESSION_CACHE_FILE)
         except OSError:
             pass
+
+    # ── Logout ─────────────────────────────────────────────
+
+    def logout(self, session_id: Optional[str] = None) -> bool:
+        """
+        调用 logout API 注销指定 Session。
+
+        Args:
+            session_id: 要注销的 Session ID，默认使用当前 Authorization Header。
+
+        Returns:
+            是否成功注销。
+        """
+        site_url = self.base_url.rsplit("/api", 1)[0]
+        logout_url = f"{site_url}/altalex/api/v1/web/public/auth/logout"
+        sid = session_id or self.session.headers.get("Authorization")
+        headers = dict(self.session.headers)
+        if sid:
+            headers["Authorization"] = sid
+        try:
+            resp = requests.post(logout_url, headers=headers, timeout=15)
+            self._clear_session_cache()
+            return resp.status_code < 400
+        except Exception:
+            self._clear_session_cache()
+            return False
 
     # ── HTTP 方法 ────────────────────────────────────────
 
