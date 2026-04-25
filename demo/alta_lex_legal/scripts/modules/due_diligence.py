@@ -109,6 +109,18 @@ class DueDiligenceModule:
 
             resp = self.client._post_with_retry("/checkDueDiligenceFile", payload)
 
+            # 检查错误状态，避免将失败误判为异步处理中
+            status = resp.get("status", "")
+            if status in ("error", "failed"):
+                return {
+                    "status": "error",
+                    "module": self.MODULE,
+                    "session_id": resp.get("sessionId", session_id),
+                    "chat_id": resp.get("chatId", ""),
+                    "content": "",
+                    "error": resp.get("message", "Due diligence file check failed"),
+                }
+
             # 单文件可能直接返回结果
             if resp.get("riskLevel"):
                 content = json.dumps({

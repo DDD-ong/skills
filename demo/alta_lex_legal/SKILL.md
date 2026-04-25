@@ -44,6 +44,35 @@ Environment variables injected via `~/.openclaw/openclaw.json`:
 
 Authentication priority: `ALTA_LEX_SESSION_ID` (if set) > `ALTA_LEX_USERNAME` + `ALTA_LEX_PASSWORD`.
 
+## File Structure
+
+All source code is located under the `scripts/` subdirectory:
+
+```
+scripts/
+├── alta_lex.py          # Main CLI entry point
+├── cron_poll.py         # Polling utility for async results
+├── core/
+│   ├── client.py        # HTTP client, authentication, session cache
+│   └── sse.py           # SSE stream handler
+├── modules/             # 11 legal AI modules
+│   ├── legal_research.py
+│   ├── contract_draft.py
+│   ├── contract_review.py
+│   ├── contract_compare.py
+│   ├── ipo_support.py
+│   ├── negotiation.py
+│   ├── translation.py
+│   ├── due_diligence.py
+│   ├── compliance.py
+│   ├── desensitization.py
+│   └── tabular.py
+└── utils/
+    └── output.py
+```
+
+> **Important**: When reading or referencing source files, always use `scripts/` as the base path (e.g., `scripts/core/client.py`, NOT `core/client.py`).
+
 ## Intent Detection
 
 | User Intent (keywords) | Module | Action |

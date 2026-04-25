@@ -6,6 +6,7 @@ SSE (Server-Sent Events) 流解析器
 
 import json
 import os
+import tempfile
 import threading
 import time
 from typing import Generator, Optional
@@ -21,13 +22,15 @@ SSE_RESULTS_DIR = os.path.join(
 class SSEEvent:
     """表示一个 SSE 数据事件。"""
 
-    def __init__(self, message: str, is_finished: bool, raw: dict):
+    def __init__(self, message: str, is_finished: bool, raw: dict, is_error: bool = False):
         self.message = message
         self.is_finished = is_finished
         self.raw = raw
+        self.is_error = is_error
 
     def __repr__(self):
-        return f"SSEEvent(message={self.message!r}, is_finished={self.is_finished})"
+        return f"SSEEvent(message={self.message!r}, is_finished={self.is_finished}, is_error={self.is_error})"
+
 
 
 def parse_sse_stream(resp: requests.Response) -> Generator[SSEEvent, None, None]:
@@ -46,9 +49,13 @@ def parse_sse_stream(resp: requests.Response) -> Generator[SSEEvent, None, None]
         buffer += chunk
         while "\n\n" in buffer:
             event_text, buffer = buffer.split("\n\n", 1)
+            event_type = "message"
             for line in event_text.split("\n"):
                 line = line.strip()
                 if not line or line.startswith(":"):
+                    continue
+                if line.startswith("event:"):
+                    event_type = line[len("event:"):].strip()
                     continue
                 if line.startswith("data:"):
                     payload = line[len("data:"):].strip()
@@ -60,14 +67,19 @@ def parse_sse_stream(resp: requests.Response) -> Generator[SSEEvent, None, None]
                             message=obj.get("message", ""),
                             is_finished=obj.get("is_finished", False),
                             raw=obj,
+                            is_error=(event_type == "error"),
                         )
                     except json.JSONDecodeError:
-                        yield SSEEvent(message=payload, is_finished=False, raw={})
+                        yield SSEEvent(message=payload, is_finished=False, raw={}, is_error=(event_type == "error"))
     # 处理缓冲区剩余数据
     if buffer.strip():
+        event_type = "message"
         for line in buffer.strip().split("\n"):
             line = line.strip()
             if not line or line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event_type = line[len("event:"):].strip()
                 continue
             if line.startswith("data:"):
                 payload = line[len("data:"):].strip()
@@ -79,9 +91,10 @@ def parse_sse_stream(resp: requests.Response) -> Generator[SSEEvent, None, None]
                         message=obj.get("message", ""),
                         is_finished=obj.get("is_finished", False),
                         raw=obj,
+                        is_error=(event_type == "error"),
                     )
                 except json.JSONDecodeError:
-                    yield SSEEvent(message=payload, is_finished=False, raw={})
+                    yield SSEEvent(message=payload, is_finished=False, raw={}, is_error=(event_type == "error"))
 
 
 def collect_sse_content(resp: requests.Response, timeout: int = 300) -> str:
@@ -111,12 +124,20 @@ def _sse_result_path(session_id: str) -> str:
 
 def write_sse_result(session_id: str, status: str, content: str = "",
                      error: str = ""):
-    """写入 SSE 结果到本地文件。"""
+    """写入 SSE 结果到本地文件（原子写入）。"""
     os.makedirs(SSE_RESULTS_DIR, exist_ok=True)
     data = {"status": status, "content": content, "error": error}
     path = _sse_result_path(session_id)
-    with open(path, "w") as f:
-        json.dump(data, f, ensure_ascii=False)
+    fd, tmp_path = tempfile.mkstemp(dir=SSE_RESULTS_DIR, suffix=".tmp")
+    os.close(fd)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp_path, path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
 def read_sse_result(session_id: str) -> Optional[dict]:
@@ -164,12 +185,12 @@ def consume_sse_background(
         try:
             if method.upper() == "POST":
                 resp = session.post(
-                    url, json=json_data or {}, stream=True, timeout=(10, 600),
+                    url, json=json_data or {}, stream=True, timeout=(10, 900),
                     headers={**session.headers, "Accept": "text/event-stream"},
                 )
             else:
                 resp = session.get(
-                    url, params=params, stream=True, timeout=(10, 600),
+                    url, params=params, stream=True, timeout=(10, 900),
                     headers={**session.headers, "Accept": "text/event-stream"},
                 )
             resp.raise_for_status()

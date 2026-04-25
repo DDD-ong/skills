@@ -51,7 +51,7 @@ class BaseClient:
     SESSION_CACHE_FILE = os.path.join(
         os.path.expanduser("~"), ".openclaw", "skills", "alta_lex_legal", ".session_cache"
     )
-    SESSION_TTL = 25 * 60  # 25 分钟 (服务端 30 分钟，留 5 分钟余量)
+    SESSION_TTL = 28 * 60  # 28 分钟 (服务端 30 分钟，留 2 分钟安全余量)
 
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = (
@@ -149,7 +149,11 @@ class BaseClient:
             err_msg = str(e).lower()
             if "already logged" in err_msg or "logout" in err_msg:
                 # 4. "already logged in" → 强制 logout 旧 Session 后重试
-                self.logout(raw_sid)
+                logout_ok = self.logout(raw_sid)
+                if not logout_ok:
+                    import logging
+                    logging.warning("Logout failed before re-login, waiting 3s...")
+                    time.sleep(3)
                 return self.login(username, password)
             raise
 
@@ -217,7 +221,7 @@ class BaseClient:
                 return None
             with open(self.SESSION_CACHE_FILE, "r") as f:
                 cache_data = _json.load(f)
-            # TTL 检查: 超过 25 分钟视为过期
+            # TTL 检查: 超过 28 分钟视为过期
             elapsed = time.time() - cache_data.get("timestamp", 0)
             if elapsed > self.SESSION_TTL:
                 return None
