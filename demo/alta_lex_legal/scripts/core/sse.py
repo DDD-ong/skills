@@ -13,10 +13,21 @@ from typing import Generator, Optional
 
 import requests
 
+def _get_workspace_dir() -> str:
+    """动态获取技能 workspace 目录。优先级：
+    1. OPENCLAW_WORKSPACE 环境变量（agent 的 workspace 路径）→ 在其下创建 alta_lex_legal 子目录
+    2. 脚本位置推算（开发/测试环境兜底）
+    """
+    ws = os.environ.get("OPENCLAW_WORKSPACE", "")
+    if ws and os.path.isdir(ws):
+        skill_dir = os.path.join(ws, "alta_lex_legal")
+        os.makedirs(skill_dir, exist_ok=True)
+        return skill_dir
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 # SSE 结果文件目录
-SSE_RESULTS_DIR = os.path.join(
-    os.path.expanduser("~"), ".openclaw", "skills", "alta_lex_legal", ".sse_results"
-)
+SSE_RESULTS_DIR = os.path.join(_get_workspace_dir(), ".sse_results")
 
 
 class SSEEvent:
@@ -203,7 +214,7 @@ def consume_sse_background(
                 if content:
                     write_sse_result(session_id, "complete", content)
                 else:
-                    write_sse_result(session_id, "running")
+                    write_sse_result(session_id, "error", error="SSE stream ended with no content")
         except Exception as e:
             if session_id:
                 content = "".join(parts)

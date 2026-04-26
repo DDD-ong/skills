@@ -14,6 +14,7 @@ Alta Lex Legal AI - CLI 入口
 """
 
 import argparse
+import importlib
 import json
 import os
 import sys
@@ -24,7 +25,22 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 from core.client import BaseClient, AltaLexError, SessionExpiredError
+from core.task_store import save_task, update_task_status, remove_completed_tasks, load_tasks
 from utils.output import json_output, error_exit
+
+
+def _get_query_from_args(args) -> str:
+    """根据模块和参数提取用户查询内容（用于任务持久化）。"""
+    action = getattr(args, "action", "")
+    if action != "start":
+        return ""
+    if hasattr(args, "query") and args.query:
+        return args.query
+    if hasattr(args, "title") and args.title:
+        return args.title
+    if hasattr(args, "request") and args.request:
+        return args.request
+    return ""
 
 
 def create_client(args) -> BaseClient:
@@ -41,6 +57,10 @@ def create_client(args) -> BaseClient:
     session_id = args.session_id or os.environ.get("ALTA_LEX_SESSION_ID")
     if session_id:
         client.set_auth(session_id)
+        try:
+            client._save_session_cache(session_id)
+        except Exception:
+            pass
         return client
 
     # 优先级 2: 用户名密码 → 智能认证 (缓存优先)
@@ -352,6 +372,14 @@ def handle_tabular(args, client):
         return result
 
 
+def handle_tasks(args, client):
+    """任务管理子命令：列出活跃任务。"""
+    if args.action == "list":
+        tasks = load_tasks()
+        print(json.dumps({"tasks": tasks}, ensure_ascii=False))
+    return None
+
+
 # ── argparse 构建 ─────────────────────────────────────
 
 
@@ -588,6 +616,11 @@ def build_parser():
     tab_check.add_argument("--session-id", required=True, dest="sid")
     tab_check.add_argument("--chat-id", required=True, dest="chat_id")
 
+    # ── tasks ──
+    tasks_parser = subparsers.add_parser("tasks", help="任务管理")
+    tasks_sub = tasks_parser.add_subparsers(dest="action")
+    tasks_list = tasks_sub.add_parser("list", help="列出活跃任务")
+
     return parser
 
 
@@ -605,6 +638,7 @@ HANDLERS = {
     "compliance": handle_compliance,
     "desensitize": handle_desensitize,
     "tabular": handle_tabular,
+    "tasks": handle_tasks,
 }
 
 
@@ -625,8 +659,39 @@ def main():
         error_exit(args.module, f"Unknown module: {args.module}")
 
     try:
+        # tasks 模块为本地任务管理，不需要认证
+        if args.module == "tasks":
+            result = handler(args, None)
+            if result:
+                json_output(**result)
+            return
+
         client = create_client(args)
         result = handler(args, client)
+
+        # task_store 持久化
+        action = getattr(args, "action", "")
+        if action == "start" and result:
+            try:
+                save_task(
+                    module=result.get("module", ""),
+                    session_id=result.get("session_id", ""),
+                    chat_id=result.get("chat_id", ""),
+                    status=result.get("status", "started"),
+                    query=_get_query_from_args(args),
+                )
+            except Exception:
+                pass
+        elif action == "check" and result:
+            try:
+                status = result.get("status", "")
+                if status in ("complete", "error"):
+                    update_task_status(
+                        session_id=result.get("session_id", ""),
+                        status=status,
+                    )
+            except Exception:
+                pass
 
         # 集中输出
         if result:

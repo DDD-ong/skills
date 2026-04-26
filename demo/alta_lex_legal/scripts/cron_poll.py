@@ -38,6 +38,7 @@ from core.client import (
     BaseClient,
     SessionExpiredError,
 )
+from core.task_store import update_task_status, remove_completed_tasks
 from utils.output import error_exit, json_output
 
 # ── 常量 ─────────────────────────────────────────────────
@@ -209,6 +210,13 @@ def single_poll(module, module_name: str, check_kwargs: dict,
         max_retries=max_retries,
         delay=delay,
     )
+    try:
+        update_task_status(
+            session_id=result.get("session_id", ""),
+            status=result.get("status", ""),
+        )
+    except Exception:
+        pass
     return result
 
 
@@ -240,6 +248,14 @@ def loop_poll(module, module_name: str, check_kwargs: dict,
             sys.exit(1)
 
         status = result.get("status", "running")
+
+        try:
+            update_task_status(
+                session_id=result.get("session_id", ""),
+                status=status,
+            )
+        except Exception:
+            pass
 
         json_output(
             status=status, module=module_name,
@@ -341,6 +357,12 @@ def build_parser() -> argparse.ArgumentParser:
 # ── 入口 ──────────────────────────────────────────────────
 
 def main():
+    # 启动时清理过期任务
+    try:
+        remove_completed_tasks()
+    except Exception:
+        pass
+
     parser = build_parser()
     args = parser.parse_args()
 

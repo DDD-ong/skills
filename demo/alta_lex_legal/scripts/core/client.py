@@ -19,6 +19,21 @@ import requests
 from typing import Optional
 
 
+def _get_workspace_dir() -> str:
+    """动态获取临时文件存储目录。优先级：
+    1. OPENCLAW_WORKSPACE 环境变量（agent 的 workspace 路径）→ 在其下创建 alta_lex_legal 子目录
+    2. 脚本位置推算（开发/测试环境兜底）
+    """
+    # 优先级1: agent workspace
+    ws = os.environ.get("OPENCLAW_WORKSPACE", "")
+    if ws and os.path.isdir(ws):
+        skill_dir = os.path.join(ws, "alta_lex_legal")
+        os.makedirs(skill_dir, exist_ok=True)
+        return skill_dir
+    # 优先级2: 脚本位置推算
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 class AltaLexError(Exception):
     """基础异常。"""
     pass
@@ -48,9 +63,7 @@ class BaseClient:
     """
 
     DEFAULT_BASE_URL = "https://test.alta-lex.ai/api"
-    SESSION_CACHE_FILE = os.path.join(
-        os.path.expanduser("~"), ".openclaw", "skills", "alta_lex_legal", ".session_cache"
-    )
+    SESSION_CACHE_FILE = os.path.join(_get_workspace_dir(), ".session_cache")
     SESSION_TTL = 28 * 60  # 28 分钟 (服务端 30 分钟，留 2 分钟安全余量)
 
     def __init__(self, base_url: Optional[str] = None):

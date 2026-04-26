@@ -1,0 +1,15 @@
+# Step 1: 生成检查清单
+python3 scripts/alta_lex.py -u "Mplus" -p 'PPD689#' \
+  duediligence checklist --document-type "Finance Report" \
+  --position "Investor" --industry "Finance"
+
+# 返回: {"status":"complete","content":"[{\"item\":\"...\"}]"}
+
+# Step 2: 提交文件分析（传入清单）
+python3 scripts/alta_lex.py -u "Mplus" -p 'PPD689#' \
+  duediligence start --file-url "https://example.com/report.pdf" \
+  --checklist '[{"item":"..."}]'
+
+# Step 3: 轮询（需要 session_id + chat_id）
+python3 scripts/cron_poll.py -u "Mplus" -p 'PPD689#' \
+  duediligence --session-id "<session_id>" --chat-id "<chat_id>" --loop
